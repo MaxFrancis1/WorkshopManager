@@ -8,4 +8,18 @@ const base = process.env.BASE_PATH ?? '/WorkshopManager/';
 export default defineConfig({
   base,
   plugins: [react()],
+  build: {
+    rolldownOptions: {
+      output: {
+        // Libraries in their own chunks: they change rarely, so browsers keep
+        // them cached across deploys. Pages are split by lazy routes in App.tsx.
+        codeSplitting: {
+          groups: [
+            { name: 'supabase', test: /node_modules[\/]@supabase[\/]/ },
+            { name: 'react', test: /node_modules[\/](react|react-dom|react-router|scheduler)[\/]/ },
+          ],
+        },
+      },
+    },
+  },
 });

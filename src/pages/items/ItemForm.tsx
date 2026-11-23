@@ -142,8 +142,9 @@ export function ItemForm() {
               <span className="field-label">Status</span>
               <select className="input" value={form.status} onChange={(e) => set('status', e.target.value as ItemStatus)}>
                 {ITEM_STATUSES.map((s) => (
-                  <option key={s} value={s}>
+                  <option key={s} value={s} disabled={s === 'sold' && item.status !== 'sold'}>
                     {STATUS_LABELS[s]}
+                    {s === 'sold' && item.status !== 'sold' ? ' (use Mark sold)' : ''}
                   </option>
                 ))}
               </select>
