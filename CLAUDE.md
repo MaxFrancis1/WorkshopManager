@@ -70,6 +70,21 @@ runtime or dev.
 - CI (`.github/workflows/ci.yml`) runs build and `test:db` on every pull request.
 - `npm run build` typechecks the app and the tests.
 
+## App structure
+
+- All Supabase calls live in `src/lib/api.ts`; each throws on error. Pages load data
+  with `useAsync` (`src/lib/useAsync.ts`) and call `reload()` after a save.
+- Row types for tables and views are hand-written in `src/lib/types.ts`; keep them in
+  step with migrations.
+- Multi-row writes that must succeed together go through a SQL function called with
+  `rpc()` (e.g. `log_purchase`), not several client inserts.
+- Money: `format.ts` has `money()` for display and `parseMoney()` for inputs (blank →
+  null, invalid → NaN). `costSplit.ts` previews purchase splits; saved figures always
+  come from the SQL views.
+- Shared classes (`.list-row`, `.chip`, `.badge-*`, `.kv`, `.form-grid`, `.fab`,
+  `.desktop-only`, `.mobile-only`) are in `global.css`. The visibility utilities only
+  hide; they never set `display`.
+
 ## UI conventions
 
 - Mobile first. Bottom tab bar (Dashboard, Items, Jobs, Parts, More) below 768px; side nav

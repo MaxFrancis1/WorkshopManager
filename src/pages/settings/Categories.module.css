@@ -1,0 +1,54 @@
+.addRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.nameRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.nameInput {
+  flex: 1;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.fieldForm {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-items: end;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+@media (min-width: 640px) {
+  .fieldForm {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr) auto;
+  }
+}
+
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.iconBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.danger {
+  color: var(--danger);
+}

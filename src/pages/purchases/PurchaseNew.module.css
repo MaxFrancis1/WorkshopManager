@@ -1,0 +1,21 @@
+.itemCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.itemHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.itemHead > :nth-child(2) {
+  flex: 1;
+}
+
+.itemNo {
+  font-weight: 700;
+  font-size: 14px;
+}
