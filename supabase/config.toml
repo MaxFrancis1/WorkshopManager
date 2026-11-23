@@ -1,0 +1,14 @@
+# Supabase CLI and GitHub integration config.
+#
+# Only supabase/migrations is deployed to the hosted project. Auth settings below
+# apply to local development only; set the hosted project's Auth settings
+# (sign-ups off) in the Supabase dashboard.
+
+project_id = "WorkshopManager"
+
+[db]
+major_version = 17
+
+[auth]
+enable_signup = false
+site_url = "http://localhost:5173/WorkshopManager/"

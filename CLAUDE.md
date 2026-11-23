@@ -23,8 +23,10 @@ This is a standalone Supabase app, not a Launchpad Consumer.
 
 ## Dependencies
 
-Runtime dependencies are limited to React, React Router and Supabase JS. **Ask before
-adding any other dependency**, runtime or dev.
+Runtime dependencies are limited to React, React Router and Supabase JS. Dev
+dependencies: Vite, its React plugin, TypeScript, type packages and
+`@electric-sql/pglite` (database tests). **Ask before adding any other dependency**,
+runtime or dev.
 
 ## Environment
 
@@ -35,16 +37,38 @@ adding any other dependency**, runtime or dev.
 
 ## Database conventions
 
-- Schema changes are **Supabase CLI migrations** in `supabase/migrations`
-  (`supabase migration new <name>`). Never edit the schema by hand in the dashboard
-  without a matching migration.
-- **RLS on every table**, with policies on `owner_id = auth.uid()`. Every table has an
-  `owner_id uuid not null default auth.uid() references auth.users`.
-- **Cost roll-ups live in SQL views** (item cost, expected profit, labour hours, stock
-  value, dashboard figures), not in client code. Views use `security_invoker = true` so
-  RLS applies.
-- Money is `numeric(10,2)` in GBP; display with `en-GB` formatting.
+- Schema changes are **Supabase migrations** in `supabase/migrations`, named
+  `YYYYMMDDHHMMSS_description.sql`. Never change a migration that has been merged to
+  `main`: add a new one. Never edit the schema by hand in the dashboard.
+- Deployment: the Supabase GitHub integration applies new migrations when `main`
+  changes. Setup steps are in `docs/setup.md`.
+- **RLS on every table**, with policy `owner_all` on `owner_id = (select auth.uid())`,
+  `for all to authenticated`. Every table has an
+  `owner_id uuid not null default auth.uid() references auth.users on delete cascade`,
+  junction tables included.
+- No anonymous access: revoke from `anon` on every new table, view and function.
+  Grant tables to `authenticated`; views get `select` only.
+- **Cost roll-ups live in SQL views**, not client code: `item_costs`,
+  `purchase_allocations`, `sale_profits`, `job_totals`, `part_stock` (dashboard views
+  come in phase 6). Views use `with (security_invoker = true)` so RLS applies.
+- Functions: `set search_path = ''`, fully qualified names, security invoker. Stock
+  movement, part-cost snapshots, work-line defaults and short IDs are triggers; the
+  client just inserts rows.
+- Money is `numeric(10,2)` GBP; part unit costs `numeric(12,4)`. Display with `en-GB`.
+- Status columns are `text` plus a check constraint, not Postgres enums.
 - Photos (later) go in a private Storage bucket, scoped per owner.
+
+## Testing
+
+- `npm run test:db` applies every migration to an in-memory Postgres (PGlite, dev
+  dependency) with a stand-in for Supabase's auth schema
+  (`supabase/tests/support/supabase-stub.sql`), then runs `supabase/tests/*.test.ts`
+  with `node --test`.
+- Guard tests fail if any public table lacks RLS or the owner policy, any `owner_id` is
+  missing or nullable, or any view is not `security_invoker`. Add tests for every new
+  trigger or view.
+- CI (`.github/workflows/ci.yml`) runs build and `test:db` on every pull request.
+- `npm run build` typechecks the app and the tests.
 
 ## UI conventions
 
