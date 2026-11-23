@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Mobile dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1E5B43}a:hover{color:#123A2B}
+</style>
+
+<div style="width: 390px; height: 1180px; box-sizing: border-box; background: #F3F4F1; font-family: Inter, system-ui, sans-serif; color: #15171A; display: flex; flex-direction: column">
+  <header style="padding: 20px 20px 12px; display: flex; justify-content: space-between; align-items: center">
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 13px; color: #5B6168">Monday 23 Nov</span>
+      <h1 style="margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 28px; font-weight: 700">Dashboard</h1>
+    </div>
+    <button aria-label="Search items" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid #E2E4DF; background: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+    </button>
+  </header>
+
+  <main style="flex: 1; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 14px">
+    <section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <div style="grid-column: span 2; background: #1E5B43; color: #FFFFFF; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; opacity: 0.85">Profit · November</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 34px; font-weight: 700">£412</span>
+        <span style="font-size: 13px; opacity: 0.85">£356 after overheads · 7 sales</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E4DF; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 12px; color: #5B6168">Stock value</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 22px; font-weight: 700">£1,240</span>
+        <span style="font-size: 12px; color: #5B6168">14 items</span>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E4DF; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 12px; color: #5B6168">Avg days to sell</span>
+        <span style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 22px; font-weight: 700">23</span>
+        <span style="font-size: 12px; color: #5B6168">Last 90 days</span>
+      </div>
+    </section>
+
+    <section style="background: #FFFFFF; border: 1px solid #E2E4DF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 700">To find</h2>
+        <span style="font-size: 12px; font-weight: 600; color: #9A4A0B; background: #FDF0E1; padding: 3px 8px; border-radius: 999px">2 open</span>
+      </div>
+      <a href="M-Item.dc.html" style="text-decoration: none; color: #15171A; display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; border-top: 1px solid #EEF0EC">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; background: #15171A; color: #FFFFFF; padding: 4px 7px; border-radius: 6px">K7</span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 14px; font-weight: 600">7-iron, KBS Tour S</span>
+          <span style="font-size: 12px; color: #5B6168">Srixon P–5 irons</span>
+        </div>
+        <span style="font-size: 11px; font-weight: 700; color: #9A4A0B; border: 1px solid #E9C9A3; padding: 3px 7px; border-radius: 6px">LISTED</span>
+      </a>
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; border-top: 1px solid #EEF0EC">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; background: #15171A; color: #FFFFFF; padding: 4px 7px; border-radius: 6px">B3</span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 14px; font-weight: 600">Headcover</span>
+          <span style="font-size: 12px; color: #5B6168">Odyssey White Hot #1 putter</span>
+        </div>
+      </div>
+    </section>
+
+    <section style="background: #FFFFFF; border: 1px solid #E2E4DF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 700">Aged stock</h2>
+        <span style="font-size: 12px; color: #5B6168">Over 90 days · £310 tied up</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid #EEF0EC">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; background: #EEF0EC; padding: 4px 7px; border-radius: 6px">D2</span>
+        <span style="flex: 1; font-size: 14px">TaylorMade M4 driver</span>
+        <span style="font-size: 13px; font-weight: 600">142 d</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid #EEF0EC">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; background: #EEF0EC; padding: 4px 7px; border-radius: 6px">W4</span>
+        <span style="flex: 1; font-size: 14px">Ping G410 3-wood</span>
+        <span style="font-size: 13px; font-weight: 600">118 d</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid #EEF0EC">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; background: #EEF0EC; padding: 4px 7px; border-radius: 6px">H9</span>
+        <span style="flex: 1; font-size: 14px">Callaway Apex hybrid 4H</span>
+        <span style="font-size: 13px; font-weight: 600">96 d</span>
+      </div>
+    </section>
+
+    <section style="background: #FFFFFF; border: 1px solid #E2E4DF; border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-size: 16px; font-weight: 700">Channels</h2>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; justify-content: space-between; font-size: 13px"><span style="font-weight: 600">eBay</span><span style="color: #5B6168">11 of 18 sold · 61%</span></div>
+        <div style="height: 8px; background: #EEF0EC; border-radius: 999px"><div style="width: 61%; height: 8px; background: #1E5B43; border-radius: 999px"></div></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; justify-content: space-between; font-size: 13px"><span style="font-weight: 600">Facebook</span><span style="color: #5B6168">3 of 9 sold · 33%</span></div>
+        <div style="height: 8px; background: #EEF0EC; border-radius: 999px"><div style="width: 33%; height: 8px; background: #1E5B43; border-radius: 999px"></div></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; justify-content: space-between; font-size: 13px"><span style="font-weight: 600">Local / club</span><span style="color: #5B6168">1 of 3 sold · 33%</span></div>
+        <div style="height: 8px; background: #EEF0EC; border-radius: 999px"><div style="width: 33%; height: 8px; background: #1E5B43; border-radius: 999px"></div></div>
+      </div>
+    </section>
+
+    <section style="background: #FFFFFF; border: 1px solid #E2E4DF; border-radius: 16px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 700">Low stock</h2>
+        <span style="font-size: 13px; color: #5B6168">Golf Pride MCC Std · 4 left</span>
+      </div>
+      <a href="#" style="font-size: 14px; font-weight: 600; min-height: 44px; display: flex; align-items: center">Restock</a>
+    </section>
+  </main>
+
+  <nav aria-label="Main" style="background: #FFFFFF; border-top: 1px solid #E2E4DF; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 6px 4px 18px">
+    <a href="Main.dc.html" style="text-decoration: none; color: #1E5B43; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; min-height: 44px; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>Dashboard</a>
+    <a href="M-Items.dc.html" style="text-decoration: none; color: #5B6168; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 500; min-height: 44px; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7l-8-4-8 4 8 4 8-4z"></path><path d="M4 7v10l8 4 8-4V7"></path><path d="M12 11v10"></path></svg>Items</a>
+    <a href="#" style="text-decoration: none; color: #5B6168; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 500; min-height: 44px; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"></path></svg>Jobs</a>
+    <a href="#" style="text-decoration: none; color: #5B6168; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 500; min-height: 44px; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>Parts</a>
+    <a href="#" style="text-decoration: none; color: #5B6168; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 500; min-height: 44px; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle></svg>More</a>
+  </nav>
+</div>
+
+
+</body>
+</html>

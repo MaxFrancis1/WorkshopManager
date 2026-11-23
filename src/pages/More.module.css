@@ -1,0 +1,38 @@
+.list {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.row {
+  text-decoration: none;
+  color: var(--ink);
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.row + .row {
+  border-top: 1px solid var(--divider);
+}
+
+.row svg {
+  color: var(--muted);
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.email {
+  font-size: 14px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
