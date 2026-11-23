@@ -387,3 +387,57 @@ describe("customer service job with the customer's own parts", () => {
     );
   });
 });
+
+describe('log_purchase', () => {
+  const D = '00000000-0000-0000-0000-00000000000d';
+
+  before(async () => {
+    await db.query(`insert into auth.users (id, email) values ($1, 'd@test')`, [D]);
+  });
+
+  test('saves the purchase and its items together, owned by the caller, with short IDs', async () => {
+    const cat = await one(D, `insert into categories (name) values ('Putter') returning id`);
+    const { purchase_id } = await one(D, 'select log_purchase($1::jsonb, $2::jsonb) as purchase_id', [
+      JSON.stringify({ purchased_on: '2026-11-11', source: ' eBay ', price: 120, postage_in: 8.5, notes: '' }),
+      JSON.stringify([
+        { name: ' Srixon P–5 irons ', category_id: null, contents: '5–PW', condition: 'Good', field_values: {}, allocated_cost: 100 },
+        { name: 'Odyssey White Hot #1', category_id: cat.id, contents: '', condition: null, field_values: { a: '34"' }, allocated_cost: null },
+      ]),
+    ]);
+
+    const purchase = await one(D, 'select owner_id, source, price, postage_in, notes from purchases where id = $1', [purchase_id]);
+    assert.equal(purchase.owner_id, D);
+    assert.equal(purchase.source, 'eBay');
+    assert.equal(purchase.notes, null);
+
+    const items = await all(D, 'select name, short_id, owner_id, contents, field_values from items where purchase_id = $1 order by name', [purchase_id]);
+    assert.deepEqual(items.map((i) => i.name), ['Odyssey White Hot #1', 'Srixon P–5 irons']);
+    for (const i of items) {
+      assert.equal(i.owner_id, D);
+      assert.match(i.short_id as string, /^[2-9A-HJ-NP-Z]{2}$/);
+    }
+    assert.equal(items[0]!.contents, null, 'blank contents stored as null');
+    assert.deepEqual(items[0]!.field_values, { a: '34"' });
+
+    const putter = await one(D, `select purchase_share from item_costs where name = 'Odyssey White Hot #1'`);
+    assert.equal(n(putter.purchase_share), 28.5); // 128.50 − 100 allocated to the irons
+  });
+
+  test('saves nothing if any item is invalid', async () => {
+    const before = n((await one(D, 'select count(*) as c from purchases')).c);
+    await assert.rejects(
+      all(D, 'select log_purchase($1::jsonb, $2::jsonb)', [
+        JSON.stringify({ price: 50 }),
+        JSON.stringify([{ name: 'Fine' }, { name: '   ' }]),
+      ]),
+      /check constraint/,
+    );
+    assert.equal(n((await one(D, 'select count(*) as c from purchases')).c), before);
+    assert.equal(n((await one(D, `select count(*) as c from items where name = 'Fine'`)).c), 0);
+  });
+
+  test('needs at least one item, and anon cannot call it', async () => {
+    await assert.rejects(all(D, `select log_purchase('{}'::jsonb, '[]'::jsonb)`), /at least one item/);
+    await assert.rejects(all(null, `select log_purchase('{}'::jsonb, '[{"name":"x"}]'::jsonb)`), /permission denied/);
+  });
+});
