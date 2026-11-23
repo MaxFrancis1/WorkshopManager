@@ -441,3 +441,228 @@ describe('log_purchase', () => {
     await assert.rejects(all(null, `select log_purchase('{}'::jsonb, '[{"name":"x"}]'::jsonb)`), /permission denied/);
   });
 });
+
+describe('work lines and jobs (add_work_line, create_job)', () => {
+  const E = '00000000-0000-0000-0000-00000000000e';
+  const ids: Record<string, string> = {};
+
+  before(async () => {
+    await db.query(`insert into auth.users (id, email) values ($1, 'e@test')`, [E]);
+    await as(E, async (tx) => {
+      const id = async (sql: string, p: unknown[] = []) => (await tx.query<Row>(sql, p)).rows[0]!.id as string;
+      const grip = await id(`insert into part_types (name) values ('Grip') returning id`);
+      ids.mcc = await id(`insert into parts (part_type_id, name, unit_cost, qty_on_hand) values ($1, 'MCC', 8.50, 10) returning id`, [grip]);
+      ids.regrip = await id(`insert into services (name, default_minutes, price) values ('Regrip', 10, 12) returning id`);
+      const purchase = await id(`insert into purchases (price) values (100) returning id`);
+      ids.item = await id(`insert into items (name, purchase_id) values ('Irons', $1) returning id`, [purchase]);
+    });
+  });
+
+  test('saves the line and its parts, defaults from the service, takes stock, moves the item to In work', async () => {
+    const { line_id } = await one(E, 'select add_work_line($1::jsonb, $2::jsonb) as line_id', [
+      JSON.stringify({ item_id: ids.item, service_id: ids.regrip, qty: 3 }),
+      JSON.stringify([{ part_id: ids.mcc, qty: 3 }, { description: 'Own tape', qty: 3, customer_supplied: true }]),
+    ]);
+    const line = await one(E, 'select minutes_each, price_each from work_lines where id = $1', [line_id]);
+    assert.equal(n(line.minutes_each), 10);
+    assert.equal(n(line.price_each), 12);
+    assert.equal(n((await one(E, 'select qty_on_hand from parts where id = $1', [ids.mcc])).qty_on_hand), 7);
+    assert.equal((await one(E, 'select status from items where id = $1', [ids.item])).status, 'in_work');
+    const cost = await one(E, 'select parts_cost, labour_minutes from item_costs where item_id = $1', [ids.item]);
+    assert.equal(n(cost.parts_cost), 25.5);
+    assert.equal(n(cost.labour_minutes), 30);
+  });
+
+  test('saves nothing if a part is invalid', async () => {
+    const before = n((await one(E, 'select count(*) as c from work_lines')).c);
+    await assert.rejects(
+      all(E, 'select add_work_line($1::jsonb, $2::jsonb)', [
+        JSON.stringify({ item_id: ids.item, service_id: ids.regrip }),
+        JSON.stringify([{ part_id: ids.mcc, qty: 0 }]),
+      ]),
+      /check constraint/,
+    );
+    assert.equal(n((await one(E, 'select count(*) as c from work_lines')).c), before);
+    assert.equal(n((await one(E, 'select qty_on_hand from parts where id = $1', [ids.mcc])).qty_on_hand), 7);
+  });
+
+  test('create_job links items; work lines under the job roll up in job_totals', async () => {
+    const { job_id } = await one(E, 'select create_job($1::jsonb, $2::uuid[]) as job_id', [
+      JSON.stringify({ kind: 'refurb', title: ' Irons refurb ', target_price: 180 }),
+      [ids.item, ids.item],
+    ]);
+    const job = await one(E, 'select title, status, owner_id from jobs where id = $1', [job_id]);
+    assert.equal(job.title, 'Irons refurb');
+    assert.equal(job.status, 'open');
+    assert.equal(job.owner_id, E);
+    await one(E, 'select add_work_line($1::jsonb) as id', [
+      JSON.stringify({ item_id: ids.item, service_id: ids.regrip, qty: 2, job_id, minutes_each: 15, extra_cost: 1.5 }),
+    ]);
+    const totals = await one(E, 'select item_count, labour_minutes, extras_cost from job_totals where job_id = $1', [job_id]);
+    assert.equal(n(totals.item_count), 1, 'duplicate item ids ignored');
+    assert.equal(n(totals.labour_minutes), 30);
+    assert.equal(n(totals.extras_cost), 1.5);
+    await assert.rejects(all(E, 'select create_job($1::jsonb)', [JSON.stringify({ kind: 'repair' })]), /check constraint/);
+  });
+
+  test('anon cannot call them', async () => {
+    await assert.rejects(all(null, 'select add_work_line($1::jsonb)', ['{}']), /permission denied/);
+    await assert.rejects(all(null, 'select create_job($1::jsonb)', ['{}']), /permission denied/);
+  });
+});
+
+describe('listings and sales (create_listing, withdraw_listing, record_sale, delete_sale)', () => {
+  const S = '00000000-0000-0000-0000-000000000005';
+  const ids: Record<string, string> = {};
+  const status = async (id: string) => (await one(S, 'select status from items where id = $1', [id])).status;
+  const listing = async (id: string) => one(S, 'select status, ended_on from listings where id = $1', [id]);
+  const create = async (channel: string, items: string[], price = 150) =>
+    (await one(S, 'select create_listing($1::jsonb, $2::uuid[]) as id', [JSON.stringify({ channel_id: channel, asking_price: price }), items]))
+      .id as string;
+  const sell = (sale: object, items: string[]) =>
+    one(S, 'select record_sale($1::jsonb, $2::uuid[]) as sale_id', [JSON.stringify(sale), items]);
+
+  before(async () => {
+    await db.query(`insert into auth.users (id, email) values ($1, 's@test')`, [S]);
+    await as(S, async (tx) => {
+      const id = async (sql: string) => (await tx.query<Row>(sql)).rows[0]!.id as string;
+      ids.ebay = await id(`insert into channels (name, fee_percent) values ('eBay', 12.8) returning id`);
+      ids.fb = await id(`insert into channels (name) values ('Facebook') returning id`);
+      ids.item = await id(`insert into items (name, status) values ('Putter', 'ready') returning id`);
+      ids.other = await id(`insert into items (name) values ('Wedge') returning id`);
+    });
+  });
+
+  test('posting lists the item; withdrawing the last live listing puts it back to Ready', async () => {
+    const ebay = await create(ids.ebay!, [ids.item!]);
+    const fb = await create(ids.fb!, [ids.item!], 140);
+    assert.equal(await status(ids.item!), 'listed');
+    assert.equal((await one(S, 'select posted_on = current_date as today from listings where id = $1', [ebay])).today, true);
+
+    await one(S, 'select withdraw_listing($1) as x', [fb]);
+    assert.equal((await listing(fb)).status, 'withdrawn');
+    assert.equal(await status(ids.item!), 'listed', 'still live on eBay');
+
+    await one(S, 'select withdraw_listing($1) as x', [ebay]);
+    assert.equal(await status(ids.item!), 'ready');
+  });
+
+  test('a sale marks items Sold, closes the listing it sold through as Sold and the others as Withdrawn', async () => {
+    const ebay = await create(ids.ebay!, [ids.item!]);
+    const fb = await create(ids.fb!, [ids.item!]);
+    const { sale_id } = await sell({ channel_id: ids.ebay, sale_price: 140, fees: 18.42, postage_out: 8 }, [ids.item!]);
+    const sale = await one(S, 'select listing_id from sales where id = $1', [sale_id]);
+    assert.equal(sale.listing_id, ebay, 'linked to the live eBay listing');
+    assert.equal(await status(ids.item!), 'sold');
+    assert.equal((await listing(ebay)).status, 'sold');
+    assert.equal((await listing(fb)).status, 'withdrawn');
+    assert.notEqual((await listing(fb)).ended_on, null);
+
+    await assert.rejects(sell({ sale_price: 1 }, [ids.item!]), /already sold/);
+    await assert.rejects(create(ids.ebay!, [ids.item!]), /cannot be listed/);
+
+    // Undo: the eBay listing reopens and the item is Listed again.
+    await one(S, 'select delete_sale($1) as x', [sale_id]);
+    assert.equal(n((await one(S, 'select count(*) as c from sales where id = $1', [sale_id])).c), 0);
+    assert.equal((await listing(ebay)).status, 'live');
+    assert.equal((await listing(fb)).status, 'withdrawn');
+    assert.equal(await status(ids.item!), 'listed');
+  });
+
+  test('a lot sells several items at once, with or without a channel', async () => {
+    const { sale_id } = await sell({ sale_price: 60 }, [ids.item!, ids.other!]);
+    assert.equal(await status(ids.other!), 'sold');
+    const p = await one(S, 'select item_count, channel_id from sale_profits where sale_id = $1', [sale_id]);
+    assert.equal(n(p.item_count), 2);
+    assert.equal(p.channel_id, null);
+  });
+
+  test('empty item lists are rejected and anon cannot call them', async () => {
+    await assert.rejects(all(S, 'select create_listing($1::jsonb, $2::uuid[])', ['{}', []]), /at least one item/);
+    await assert.rejects(all(S, 'select record_sale($1::jsonb, $2::uuid[])', [JSON.stringify({ sale_price: 1 }), []]), /at least one item/);
+    await assert.rejects(all(null, 'select record_sale($1::jsonb, $2::uuid[])', ['{}', []]), /permission denied/);
+    await assert.rejects(all(null, 'select withdraw_listing(gen_random_uuid())'), /permission denied/);
+  });
+});
+
+describe('dashboard views', () => {
+  const F = '00000000-0000-0000-0000-00000000000f';
+
+  before(async () => {
+    await db.query(`insert into auth.users (id, email) values ($1, 'f@test')`, [F]);
+    await as(F, async (tx) => {
+      const id = async (sql: string, p: unknown[] = []) => (await tx.query<Row>(sql, p)).rows[0]!.id as string;
+      await tx.query('insert into settings (aged_stock_days) values (60)');
+      const putter = await id(`insert into categories (name) values ('Putter') returning id`);
+      const ebay = await id(`insert into channels (name) values ('eBay') returning id`);
+
+      // A: bought 100 days ago, unsold: aged stock (threshold 60).
+      const pa = await id('insert into purchases (purchased_on, price) values (current_date - 100, 50) returning id');
+      const a = await id(`insert into items (name, category_id, purchase_id) values ('Old putter', $1, $2) returning id`, [putter, pa]);
+      await tx.query(`insert into to_find_notes (item_id, description) values ($1, 'Headcover')`, [a]);
+
+      // B: bought 20 days ago for £40, listed on eBay, sold today for £100 − £10 fees − £5 postage.
+      const pb = await id('insert into purchases (purchased_on, price) values (current_date - 20, 40) returning id');
+      const b = await id(`insert into items (name, category_id, purchase_id) values ('Sold putter', $1, $2) returning id`, [putter, pb]);
+      await tx.query('select create_listing($1::jsonb, $2::uuid[])', [JSON.stringify({ channel_id: ebay, asking_price: 110 }), [b]]);
+      await tx.query('select record_sale($1::jsonb, $2::uuid[])', [
+        JSON.stringify({ channel_id: ebay, sale_price: 100, fees: 10, postage_out: 5 }),
+        [b],
+      ]);
+
+      // C: bought 30 days ago for £80, sold today for £50 with no channel: a loss.
+      const pc = await id('insert into purchases (purchased_on, price) values (current_date - 30, 80) returning id');
+      const c = await id(`insert into items (name, purchase_id) values ('Driver', $1) returning id`, [pc]);
+      await tx.query('select record_sale($1::jsonb, $2::uuid[])', [JSON.stringify({ sale_price: 50 }), [c]]);
+
+      await tx.query(`insert into overheads (description, amount) values ('Solvent', 15)`);
+    });
+  });
+
+  test('dashboard_summary has stock, this month, year to date and days to sell', async () => {
+    const s = await one(F, 'select * from dashboard_summary');
+    assert.equal(n(s.stock_value), 50);
+    assert.equal(n(s.stock_count), 1);
+    assert.equal(n(s.month_profit), 15); // 45 − 30
+    assert.equal(n(s.month_sales), 2);
+    assert.equal(n(s.month_overheads), 15);
+    assert.equal(n(s.ytd_profit), 15);
+    assert.equal(n(s.ytd_losses), 1);
+    assert.equal(n(s.avg_days_to_sell), 25); // (20 + 30) / 2
+    // Another user's figures do not include F's data.
+    assert.notEqual(n((await one(A, 'select stock_value from dashboard_summary')).stock_value), 50);
+  });
+
+  test('monthly_profit covers 12 months, with overheads taken off', async () => {
+    const rows = await all(F, 'select * from monthly_profit order by month');
+    assert.equal(rows.length, 12);
+    const current = rows[11]!;
+    assert.equal(n(current.profit), 15);
+    assert.equal(n(current.overheads), 15);
+    assert.equal(n(current.profit_after_overheads), 0);
+    assert.equal(n(current.loss_count), 1);
+    assert.equal(n(rows[0]!.sales_count), 0);
+  });
+
+  test('channel_stats, category_sell_times, aged_stock and open_to_find', async () => {
+    const ch = await one(F, `select * from channel_stats where name = 'eBay'`);
+    assert.equal(n(ch.posted), 1);
+    assert.equal(n(ch.sold), 1);
+    assert.equal(n(ch.sell_through_percent), 100);
+    assert.equal(n(ch.avg_days_to_sell), 20);
+    assert.equal(n(ch.live_listings), 0);
+
+    const cat = await all(F, 'select name, sales_count, avg_days_to_sell from category_sell_times');
+    assert.deepEqual(cat.map((r) => [r.name, n(r.sales_count), n(r.avg_days_to_sell)]), [['Putter', 1, 20]]);
+
+    const aged = await all(F, 'select name, days_in_stock, total_cost from aged_stock');
+    assert.deepEqual(aged.map((r) => [r.name, n(r.days_in_stock), n(r.total_cost)]), [['Old putter', 100, 50]]);
+
+    let note = await one(F, 'select item_name, flagged from open_to_find');
+    assert.equal(note.item_name, 'Old putter');
+    assert.equal(note.flagged, false);
+    await affected(F, `update items set status = 'ready' where name = 'Old putter'`);
+    note = await one(F, 'select flagged from open_to_find');
+    assert.equal(note.flagged, true, 'flagged once the item is Ready');
+  });
+});
