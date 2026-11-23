@@ -37,6 +37,14 @@ export function hours(minutes: number): string {
   return `${h} h`;
 }
 
+/** 2 h 30 m, from minutes. */
+export function hoursMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  if (h === 0) return `${m} m`;
+  return m === 0 ? `${h} h` : `${h} h ${m} m`;
+}
+
 /**
  * Parses a money input such as "£1,250.5" to 1250.5. Blank gives null; anything
  * unparseable gives NaN so the form can flag it.

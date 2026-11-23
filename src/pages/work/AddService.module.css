@@ -1,0 +1,71 @@
+.sheet {
+  max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 18px 20px 24px;
+  gap: 18px;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.title {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.close {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 18px;
+  flex: none;
+}
+
+.fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.fieldset legend {
+  padding: 0 0 8px;
+}
+
+.qtyRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sumRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.smallInput {
+  width: 96px;
+  text-align: right;
+  flex: none;
+}
+
+.total {
+  padding-top: 10px;
+  border-top: 1px solid var(--divider);
+  font-weight: 700;
+  font-size: 16px;
+}

@@ -67,8 +67,15 @@ runtime or dev.
 - Guard tests fail if any public table lacks RLS or the owner policy, any `owner_id` is
   missing or nullable, or any view is not `security_invoker`. Add tests for every new
   trigger or view.
-- CI (`.github/workflows/ci.yml`) runs build and `test:db` on every pull request.
+- `npm run test:unit` runs `tests/unit/*.test.ts`: the pure calculators in `src/lib`
+  (profit estimate, what-if, cost split, listing text). `npm test` runs both suites.
+- CI (`.github/workflows/ci.yml`) runs build, unit and database tests on every pull
+  request.
 - `npm run build` typechecks the app and the tests.
+- New migrations reach the hosted database only when merged to `main`, so a screen
+  that needs a new function or view can't be tested locally before then. Ship the
+  migration in its own PR first, then test the UI against live data with records
+  named `TEST …` and delete them afterwards.
 
 ## App structure
 
@@ -77,7 +84,13 @@ runtime or dev.
 - Row types for tables and views are hand-written in `src/lib/types.ts`; keep them in
   step with migrations.
 - Multi-row writes that must succeed together go through a SQL function called with
-  `rpc()` (e.g. `log_purchase`), not several client inserts.
+  `rpc()`: `log_purchase`, `add_work_line`, `create_job`, `create_listing`,
+  `withdraw_listing`, `record_sale`, `delete_sale`. Item and listing statuses are kept
+  in step by those functions, so the UI never sets Listed or Sold by hand.
+- Pages are lazy-loaded per route (`App.tsx`); React and Supabase are split into their
+  own chunks (`vite.config.ts`).
+- Calculator figures are estimates (`src/lib/profit.ts`); the dashboard and sale pages
+  use actuals from `sale_profits` and the dashboard views.
 - Money: `format.ts` has `money()` for display and `parseMoney()` for inputs (blank →
   null, invalid → NaN). `costSplit.ts` previews purchase splits; saved figures always
   come from the SQL views.
@@ -95,7 +108,8 @@ runtime or dev.
 
 ## Phase plan
 
-One branch and PR per phase. Stop for review after each.
+All seven phases are built. Phases 4–7 shipped as a database PR followed by a UI PR.
+Basic Jobs (kind, status, items, work lines, totals) were added alongside.
 
 1. Scaffold, auth, shell, deploy
 2. Schema, RLS, cost views (migrations)
@@ -104,3 +118,6 @@ One branch and PR per phase. Stop for review after each.
 5. Channels, listings, sales
 6. Dashboard, to-find notes, overheads, settings
 7. Listing text helper, responsive polish
+
+Still "Next" in the spec: split item, returns, write-off with loss logging, part
+exchange, customers, PDF quotes and receipts, photos, CSV export.

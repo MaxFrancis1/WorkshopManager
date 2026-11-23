@@ -61,3 +61,49 @@
   font-size: 13px;
   font-weight: 600;
 }
+
+.tickRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  border-top: 1px solid var(--divider);
+}
+
+.tickRow:first-child {
+  border-top: 0;
+}
+
+.tickLabel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tickLabel input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.tickMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.calcInputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
