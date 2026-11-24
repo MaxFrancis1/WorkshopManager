@@ -48,6 +48,25 @@ async function affected(uid: string | null, sql: string, params: unknown[] = [])
 
 const n = (v: unknown) => (v === null || v === undefined ? v : Number(v));
 
+const G = '00000000-0000-0000-0000-000000000006';
+
+/** Rows inserted just before the migration with this timestamp runs. */
+const LEGACY_SEEDS: Record<string, () => Promise<void>> = {
+  // Purchases with free-text sources, before sources became a table.
+  '20261126090000': async () => {
+    await db.query(`insert into auth.users (id, email) values ($1, 'g@test')`, [G]);
+    await db.query(
+      `insert into purchases (owner_id, source, price, created_at) values
+         ($1, 'Facebook', 60, now() - interval '3 days'),
+         ($1, ' facebook ', 80, now() - interval '2 days'),
+         ($1, 'Present', 0, now() - interval '1 day'),
+         ($1, '   ', 5, now()),
+         ($1, null, 5, now())`,
+      [G],
+    );
+  },
+};
+
 before(async () => {
   db = await PGlite.create();
   await db.exec(readFileSync(join(supabaseDir, 'tests', 'support', 'supabase-stub.sql'), 'utf8'));
@@ -56,6 +75,9 @@ before(async () => {
   const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length > 0, 'no migrations found');
   for (const file of files) {
+    // Data that existed before a migration, so its backfill can be tested.
+    const seed = LEGACY_SEEDS[file.slice(0, 14)];
+    if (seed) await seed();
     try {
       await db.exec(readFileSync(join(migrationsDir, file), 'utf8'));
     } catch (err) {
@@ -664,5 +686,126 @@ describe('dashboard views', () => {
     await affected(F, `update items set status = 'ready' where name = 'Old putter'`);
     note = await one(F, 'select flagged from open_to_find');
     assert.equal(note.flagged, true, 'flagged once the item is Ready');
+  });
+});
+
+describe('purchase sources', () => {
+  test('backfill creates one source per name (trimmed, any case) and links every purchase', async () => {
+    const sources = await all(G, 'select name from sources order by name');
+    assert.deepEqual(sources.map((s) => s.name), ['Facebook', 'Present']);
+    const linked = await all(
+      G,
+      'select p.price, s.name as source_name, p.source from purchases p left join sources s on s.id = p.source_id order by p.price, p.created_at',
+    );
+    assert.deepEqual(
+      linked.map((r) => [n(r.price), r.source_name]),
+      [
+        [0, 'Present'],
+        [5, null],
+        [5, null],
+        [60, 'Facebook'],
+        [80, 'Facebook'],
+      ],
+    );
+    const alloc = await all(G, 'select source from purchase_allocations where total_cost = 80');
+    assert.equal(alloc[0]!.source, 'Facebook');
+  });
+
+  test('the transitional trigger keeps source text and source_id in step both ways', async () => {
+    // Text from the old screens finds the existing source, whatever the case.
+    const p = await one(G, `insert into purchases (source, price) values ('PRESENT', 1) returning id, source, source_id`);
+    const present = await one(G, `select id from sources where name = 'Present'`);
+    assert.equal(p.source_id, present.id);
+    assert.equal(p.source, 'Present');
+
+    // New text creates a new source.
+    const q = await one(G, `insert into purchases (source, price) values ('Car boot', 2) returning id, source_id`);
+    assert.ok(q.source_id);
+    assert.equal(n((await one(G, 'select count(*) as c from sources')).c), 3);
+
+    // Choosing a source by id sets the text; editing the text moves the id.
+    const fb = await one(G, `select id from sources where name = 'Facebook'`);
+    const r = await one(G, 'update purchases set source_id = $2 where id = $1 returning source', [q.id, fb.id]);
+    assert.equal(r.source, 'Facebook');
+    const t = await one(G, `update purchases set source = 'Present' where id = $1 returning source_id`, [q.id]);
+    assert.equal(t.source_id, present.id);
+    const blank = await one(G, `update purchases set source = '' where id = $1 returning source, source_id`, [q.id]);
+    assert.equal(blank.source, null);
+    assert.equal(blank.source_id, null);
+  });
+
+  test('a source in use cannot be deleted; names are unique per owner, any case', async () => {
+    const fb = await one(G, `select id from sources where name = 'Facebook'`);
+    await assert.rejects(all(G, 'delete from sources where id = $1', [fb.id]), /foreign key/);
+    await assert.rejects(all(G, `insert into sources (name) values ('facebook')`), /duplicate key/);
+    assert.equal((await one(A, `insert into sources (name) values ('Facebook') returning name`)).name, 'Facebook');
+    assert.equal(n((await one(A, 'select count(*) as c from sources where owner_id <> $1', [A])).c), 0, "A sees only A's sources");
+  });
+
+  test('log_purchase takes a source_id and each item’s expected price', async () => {
+    const fb = await one(G, `select id from sources where name = 'Facebook'`);
+    const { purchase_id } = await one(G, 'select log_purchase($1::jsonb, $2::jsonb) as purchase_id', [
+      JSON.stringify({ source_id: fb.id, price: 50 }),
+      JSON.stringify([{ name: 'Valued wedge', expected_price: 90 }]),
+    ]);
+    const p = await one(G, 'select source, source_id from purchases where id = $1', [purchase_id]);
+    assert.equal(p.source_id, fb.id);
+    assert.equal(p.source, 'Facebook');
+    const i = await one(G, 'select expected_price from items where purchase_id = $1', [purchase_id]);
+    assert.equal(n(i.expected_price), 90);
+  });
+});
+
+describe('item value', () => {
+  const V = '00000000-0000-0000-0000-000000000007';
+  const ids: Record<string, string> = {};
+
+  before(async () => {
+    await db.query(`insert into auth.users (id, email) values ($1, 'v@test')`, [V]);
+    await as(V, async (tx) => {
+      const id = async (sql: string, p: unknown[] = []) => (await tx.query<Row>(sql, p)).rows[0]!.id as string;
+      ids.ebay = await id(`insert into channels (name) values ('eBay') returning id`);
+      const purchase = await id('insert into purchases (price) values (100) returning id');
+      ids.irons = await id(`insert into items (name, purchase_id, allocated_cost, expected_price) values ('Irons', $1, 70, 180) returning id`, [purchase]);
+      ids.gift = await id(`insert into items (name, expected_price) values ('Gift putter', 60) returning id`);
+      ids.unpriced = await id(`insert into items (name, purchase_id) values ('Unpriced wedge', $1) returning id`, [purchase]);
+    });
+  });
+
+  test('sale value is the expected price until listed on its own, then the lowest asking price', async () => {
+    let irons = await one(V, 'select total_cost, expected_price, listed_price, sale_value, potential_profit from item_costs where item_id = $1', [ids.irons]);
+    assert.equal(n(irons.total_cost), 70);
+    assert.equal(irons.listed_price, null);
+    assert.equal(n(irons.sale_value), 180);
+    assert.equal(n(irons.potential_profit), 110);
+
+    // A lot listing does not price the item on its own.
+    await one(V, 'select create_listing($1::jsonb, $2::uuid[]) as id', [JSON.stringify({ channel_id: ids.ebay, asking_price: 200 }), [ids.irons, ids.unpriced]]);
+    irons = await one(V, 'select listed_price, sale_value from item_costs where item_id = $1', [ids.irons]);
+    assert.equal(irons.listed_price, null);
+    assert.equal(n(irons.sale_value), 180);
+
+    await one(V, 'select create_listing($1::jsonb, $2::uuid[]) as id', [JSON.stringify({ channel_id: ids.ebay, asking_price: 175 }), [ids.irons]]);
+    irons = await one(V, 'select listed_price, sale_value, potential_profit from item_costs where item_id = $1', [ids.irons]);
+    assert.equal(n(irons.listed_price), 175);
+    assert.equal(n(irons.sale_value), 175);
+    assert.equal(n(irons.potential_profit), 105);
+
+    const gift = await one(V, 'select total_cost, sale_value, potential_profit from item_costs where item_id = $1', [ids.gift]);
+    assert.equal(n(gift.total_cost), 0);
+    assert.equal(n(gift.potential_profit), 60, 'a present at £0 still has a value');
+  });
+
+  test('dashboard_summary shows stock invested and at sale value, and counts unpriced items', async () => {
+    const s = await one(V, 'select stock_value, stock_sale_value, stock_priced_cost, stock_unpriced_count, stock_count from dashboard_summary');
+    assert.equal(n(s.stock_count), 3);
+    assert.equal(n(s.stock_value), 100); // invested: 70 + 0 + 30
+    assert.equal(n(s.stock_sale_value), 235); // 175 + 60
+    assert.equal(n(s.stock_priced_cost), 70); // irons 70 + gift 0
+    assert.equal(n(s.stock_unpriced_count), 1);
+  });
+
+  test('expected price cannot be negative', async () => {
+    await assert.rejects(all(V, 'update items set expected_price = -1 where id = $1', [ids.gift]), /check constraint/);
   });
 });
