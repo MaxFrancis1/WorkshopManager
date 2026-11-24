@@ -12,6 +12,11 @@ export function moneyWhole(value: number | null | undefined): string {
   return value === null || value === undefined ? '—' : gbpWhole.format(value);
 }
 
+/** £200 for whole pounds, £12.50 otherwise (price tags). */
+export function moneyTag(value: number): string {
+  return Number.isInteger(value) ? gbpWhole.format(value) : gbp.format(value);
+}
+
 /** 23 Nov 2026, from a yyyy-mm-dd date column. */
 export function date(value: string | null | undefined): string {
   if (!value) return '—';

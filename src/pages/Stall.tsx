@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { ErrorNote, Loading, ShortId } from '../components/ui';
 import { PageHeader } from '../layout/PageHeader';
 import { listCategories, listChannels, listItems, listLiveListings } from '../lib/api';
-import { daysSince, money, moneyWhole } from '../lib/format';
+import { daysSince, moneyTag, moneyWhole } from '../lib/format';
 import type { Item, Listing } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 import styles from './Stall.module.css';
@@ -128,7 +128,7 @@ export function Stall() {
                     {c.price !== null && (
                       <span className={styles.tag}>
                         <span className={styles.hole} aria-hidden="true" />
-                        {money(c.price)}
+                        {moneyTag(c.price)}
                       </span>
                     )}
                   </div>

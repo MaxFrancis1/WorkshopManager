@@ -8,19 +8,23 @@
 }
 
 .awning {
-  height: 34px;
+  height: 38px;
   background: repeating-linear-gradient(90deg, var(--accent) 0 40px, #ffffff 40px 80px);
-  /* Scalloped edge. */
-  -webkit-mask: radial-gradient(20px at 20px 100%, #0000 98%, #000) 0 0 / 40px 100%;
-  mask: radial-gradient(20px at 20px 100%, #0000 98%, #000) 0 0 / 40px 100%;
-  -webkit-mask-composite: source-over;
+  /* Solid top, then one scallop hanging under each 40px stripe. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) top / 100% 18px no-repeat,
+    radial-gradient(circle 20px at 50% 0, #000 98%, #0000) 0 18px / 40px 20px repeat-x;
+  mask:
+    linear-gradient(#000 0 0) top / 100% 18px no-repeat,
+    radial-gradient(circle 20px at 50% 0, #000 98%, #0000) 0 18px / 40px 20px repeat-x;
+  filter: drop-shadow(0 2px 0 rgba(21, 23, 26, 0.12));
 }
 
 .table {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 14px;
-  padding: 16px 14px 20px;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 12px;
+  padding: 16px 12px 20px;
 }
 
 @media (min-width: 768px) {
@@ -69,7 +73,7 @@
 
 .initial {
   font-family: var(--font-display);
-  font-size: 54px;
+  font-size: clamp(38px, 12vw, 54px);
   font-weight: 700;
   color: rgba(21, 23, 26, 0.16);
   user-select: none;
@@ -88,7 +92,7 @@
 .tag {
   position: absolute;
   top: -6px;
-  right: 10px;
+  right: 8px;
   transform: rotate(6deg);
   transform-origin: top center;
   background: #fffdf6;

@@ -1,5 +1,5 @@
-import { lazy, Suspense, type ReactNode } from 'react';
-import { createHashRouter, Navigate, RouterProvider } from 'react-router';
+import { Fragment, lazy, Suspense, type ReactNode } from 'react';
+import { createHashRouter, Navigate, RouterProvider, useLocation } from 'react-router';
 import { AuthProvider } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
 import { Loading } from './components/ui';
@@ -36,7 +36,21 @@ const Channels = page(() => import('./pages/settings/Channels').then((m) => ({ d
 const Sources = page(() => import('./pages/settings/Sources').then((m) => ({ default: m.Sources })));
 const Stall = page(() => import('./pages/Stall').then((m) => ({ default: m.Stall })));
 
-const s = (el: ReactNode) => <Suspense fallback={<Loading />}>{el}</Suspense>;
+/**
+ * Remounts the page whenever the path changes, so going from one item (or job,
+ * purchase…) straight to another never carries over the previous page's state.
+ * Query-string changes such as list filters keep the page as it is.
+ */
+function FreshPerPath({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return <Fragment key={pathname}>{children}</Fragment>;
+}
+
+const s = (el: ReactNode) => (
+  <Suspense fallback={<Loading />}>
+    <FreshPerPath>{el}</FreshPerPath>
+  </Suspense>
+);
 
 // Hash routing: GitHub Pages 404s on deep links, so every route lives after the #.
 const router = createHashRouter([

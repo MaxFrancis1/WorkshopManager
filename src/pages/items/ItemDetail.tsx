@@ -79,6 +79,7 @@ export function ItemDetail() {
   const [calc, setCalc] = useState<CalcState>(EMPTY_CALC);
   const [calcReady, setCalcReady] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [saleTyped, setSaleTyped] = useState(false);
 
   // Calculator defaults: the item's value (else its live listing's price), and the
   // channel and postage last used for it in this browser.
@@ -103,17 +104,18 @@ export function ItemDetail() {
     setCalcReady(true);
   }, [data, calcReady, id]);
 
-  // Save the expected sale as the item's value, shortly after typing stops.
+  // Save the expected sale as the item's value, shortly after you type it (never
+  // just from opening the page, which pre-fills it from a listing's price).
   const savedPrice = data?.item?.expected_price ?? null;
   useEffect(() => {
-    if (!calcReady) return;
+    if (!calcReady || !saleTyped) return;
     const n = parseMoney(calc.sale);
     if (Number.isNaN(n) || n === savedPrice) return;
     const t = window.setTimeout(() => {
       updateItem(id, { expected_price: n }).then(reload, (err: unknown) => setActionError(errorMessage(err)));
     }, 800);
     return () => window.clearTimeout(t);
-  }, [calc.sale, calcReady, savedPrice, id, reload]);
+  }, [calc.sale, calcReady, saleTyped, savedPrice, id, reload]);
 
   if (loading && !data) return <Loading />;
   if (error) return <ErrorNote error={error} />;
@@ -322,6 +324,7 @@ export function ItemDetail() {
                 channels={channels}
                 state={calc}
                 onChange={(s) => {
+                  if (s.sale !== calc.sale) setSaleTyped(true);
                   setCalc(s);
                   saveCalc(item.id, s);
                 }}
