@@ -34,6 +34,7 @@ import type {
   Service,
   ServicePart,
   Settings,
+  Source,
   ToFindNote,
   WorkLine,
 } from './types';
@@ -106,7 +107,7 @@ export async function deleteField(id: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const ITEM_COLUMNS =
-  'id, short_id, name, category_id, contents, field_values, condition, status, purchase_id, allocated_cost, customer_id, notes, created_at';
+  'id, short_id, name, category_id, contents, field_values, condition, status, purchase_id, allocated_cost, customer_id, notes, created_at, expected_price';
 
 export async function listItems(): Promise<Item[]> {
   return must(await db().from('items').select(ITEM_COLUMNS).order('created_at', { ascending: false })) as Item[];
@@ -133,6 +134,7 @@ export interface ItemInput {
   purchase_id: string | null;
   allocated_cost: number | null;
   notes: string | null;
+  expected_price: number | null;
   status?: ItemStatus;
 }
 
@@ -152,7 +154,10 @@ export async function deleteItem(id: string): Promise<void> {
 // Purchases
 // ---------------------------------------------------------------------------
 
-const PURCHASE_COLUMNS = 'id, purchased_on, source, price, postage_in, notes, created_at';
+const PURCHASE_COLUMNS = 'id, purchased_on, source_id, price, postage_in, notes, created_at, sources (name)';
+
+type PurchaseRow = Omit<Purchase, 'source'> & { sources: { name: string } | null };
+const toPurchase = ({ sources, ...p }: PurchaseRow): Purchase => ({ ...p, source: sources?.name ?? null });
 
 export async function listPurchaseAllocations(): Promise<PurchaseAllocation[]> {
   return must(
@@ -161,13 +166,15 @@ export async function listPurchaseAllocations(): Promise<PurchaseAllocation[]> {
 }
 
 export async function listPurchases(): Promise<Purchase[]> {
-  return must(
+  const rows = must(
     await db().from('purchases').select(PURCHASE_COLUMNS).order('purchased_on', { ascending: false }),
-  ) as Purchase[];
+  ) as unknown as PurchaseRow[];
+  return rows.map(toPurchase);
 }
 
 export async function getPurchase(id: string): Promise<Purchase | null> {
-  return must(await db().from('purchases').select(PURCHASE_COLUMNS).eq('id', id).maybeSingle()) as Purchase | null;
+  const row = must(await db().from('purchases').select(PURCHASE_COLUMNS).eq('id', id).maybeSingle()) as unknown as PurchaseRow | null;
+  return row ? toPurchase(row) : null;
 }
 
 export async function getPurchaseAllocation(id: string): Promise<PurchaseAllocation | null> {
@@ -184,7 +191,7 @@ export async function listItemCostsForPurchase(purchaseId: string): Promise<Item
 
 export interface PurchaseInput {
   purchased_on: string;
-  source: string | null;
+  source_id: string | null;
   price: number;
   postage_in: number;
   notes: string | null;
@@ -197,6 +204,7 @@ export interface PurchaseItemInput {
   condition: string | null;
   field_values: FieldValues;
   allocated_cost: number | null;
+  expected_price: number | null;
 }
 
 /** Saves a purchase and its items in one transaction. Returns the purchase id. */
@@ -212,12 +220,42 @@ export async function deletePurchase(id: string): Promise<void> {
   must(await db().from('purchases').delete().eq('id', id));
 }
 
-/** Past purchase sources, most recent first, for the source suggestions list. */
-export async function listSources(): Promise<string[]> {
-  const rows = must(
-    await db().from('purchases').select('source').not('source', 'is', null).order('purchased_on', { ascending: false }).limit(200),
-  ) as { source: string }[];
-  return [...new Set(rows.map((r) => r.source))];
+// ---------------------------------------------------------------------------
+// Purchase sources
+// ---------------------------------------------------------------------------
+
+export async function listSources(): Promise<Source[]> {
+  return must(await db().from('sources').select('id, name').order('name')) as Source[];
+}
+
+export async function createSource(name: string): Promise<Source> {
+  return must(await db().from('sources').insert({ name: name.trim() }).select('id, name').single()) as Source;
+}
+
+export async function renameSource(id: string, name: string): Promise<void> {
+  must(await db().from('sources').update({ name: name.trim() }).eq('id', id));
+}
+
+export async function deleteSource(id: string): Promise<void> {
+  must(await db().from('sources').delete().eq('id', id));
+}
+
+export async function countPurchasesBySource(): Promise<Record<string, number>> {
+  const rows = must(await db().from('purchases').select('source_id').not('source_id', 'is', null)) as { source_id: string }[];
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.source_id] = (out[r.source_id] ?? 0) + 1;
+  return out;
+}
+
+/** Live listings with their items, for the stall. */
+export async function listLiveListings(): Promise<Listing[]> {
+  return must(
+    await db()
+      .from('listings')
+      .select('id, channel_id, title, posted_on, asking_price, status, ended_on, listing_items (item_id)')
+      .eq('status', 'live')
+      .order('posted_on', { ascending: false }),
+  ) as Listing[];
 }
 
 // ---------------------------------------------------------------------------

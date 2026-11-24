@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { SourceSelect } from '../../components/SourceSelect';
 import { ErrorNote, Loading, ShortId, StatusBadge } from '../../components/ui';
 import { PageHeader } from '../../layout/PageHeader';
 import {
@@ -14,7 +15,7 @@ import {
 } from '../../lib/api';
 import { splitCost } from '../../lib/costSplit';
 import { date, money, moneyInput, parseMoney } from '../../lib/format';
-import type { Purchase } from '../../lib/types';
+import type { Purchase, Source } from '../../lib/types';
 import { errorMessage, useAsync } from '../../lib/useAsync';
 
 export function PurchaseDetail() {
@@ -105,7 +106,7 @@ export function PurchaseDetail() {
         ← Purchases
       </Link>
       <PageHeader
-        title={purchase.source || 'Purchase'}
+        title={`Bought ${date(purchase.purchased_on)}`}
         actions={
           <Link to={`/items/new?purchase=${purchase.id}`} className="btn btn-secondary">
             + Add item
@@ -113,7 +114,7 @@ export function PurchaseDetail() {
         }
       />
       <span className="muted" style={{ marginTop: -10, fontSize: 14 }}>
-        {date(purchase.purchased_on)} · {money(total)}
+        {purchase.source ?? 'No source'} · {money(total)}
       </span>
 
       {justSaved && costs.length > 0 && (
@@ -219,7 +220,7 @@ export function PurchaseDetail() {
         <ErrorNote error={actionError} />
       </section>
 
-      <PurchaseFields key={purchase.id + purchase.price + purchase.postage_in} purchase={purchase} sources={sources} onSaved={reload} />
+      <PurchaseFields key={purchase.id + purchase.price + purchase.postage_in + purchase.source_id} purchase={purchase} sources={sources} onSaved={reload} />
 
       {costs.length === 0 && (
         <div>
@@ -232,9 +233,11 @@ export function PurchaseDetail() {
   );
 }
 
-function PurchaseFields({ purchase, sources, onSaved }: { purchase: Purchase; sources: string[]; onSaved: () => void }) {
+function PurchaseFields({ purchase, sources: loaded, onSaved }: { purchase: Purchase; sources: Source[]; onSaved: () => void }) {
   const [purchasedOn, setPurchasedOn] = useState(purchase.purchased_on);
-  const [source, setSource] = useState(purchase.source ?? '');
+  const [sourceId, setSourceId] = useState(purchase.source_id ?? '');
+  const [added, setAdded] = useState<Source[]>([]);
+  const sources = [...loaded, ...added].sort((a, b) => a.name.localeCompare(b.name));
   const [price, setPrice] = useState(moneyInput(purchase.price));
   const [postage, setPostage] = useState(moneyInput(purchase.postage_in));
   const [notes, setNotes] = useState(purchase.notes ?? '');
@@ -254,7 +257,7 @@ function PurchaseFields({ purchase, sources, onSaved }: { purchase: Purchase; so
     try {
       await updatePurchase(purchase.id, {
         purchased_on: purchasedOn,
-        source: source.trim() || null,
+        source_id: sourceId || null,
         price: priceN ?? 0,
         postage_in: postageN ?? 0,
         notes: notes.trim() || null,
@@ -276,15 +279,18 @@ function PurchaseFields({ purchase, sources, onSaved }: { purchase: Purchase; so
           <span className="field-label">Date</span>
           <input className="input" type="date" value={purchasedOn} onChange={(e) => setPurchasedOn(e.target.value)} />
         </label>
-        <label className="field">
+        <div className="field">
           <span className="field-label">Source</span>
-          <input className="input" list="purchase-sources" value={source} onChange={(e) => setSource(e.target.value)} />
-          <datalist id="purchase-sources">
-            {sources.map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
-        </label>
+          <SourceSelect
+            sources={sources}
+            value={sourceId}
+            onChange={(v) => {
+              setSourceId(v);
+              setSaved(false);
+            }}
+            onCreated={(src) => setAdded((a) => [...a, src])}
+          />
+        </div>
         <label className="field">
           <span className="field-label">Price paid</span>
           <input className="input" inputMode="decimal" value={price} aria-invalid={!valid && Number.isNaN(priceN)} onChange={(e) => setPrice(e.target.value)} />

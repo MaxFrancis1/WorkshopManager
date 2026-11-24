@@ -15,6 +15,12 @@ export interface Estimate {
   fees: number;
   profit: number;
   marginPercent: number | null;
+  /**
+   * The margin the target-margin price solves for: after labour when labour is
+   * costed, otherwise before. Typing a margin gives priceForTarget; typing that
+   * price gives this margin back.
+   */
+  effectiveMarginPercent: number | null;
   labourHours: number;
   labourCost: number | null;
   profitAfterLabour: number | null;
@@ -60,10 +66,12 @@ export function estimate(input: EstimateInput): Estimate {
   const sale = input.salePrice ?? 0;
   const fees = channelFees(sale, input.channel);
   const profit = r2(sale - fees - input.postageOut - input.cost);
+  const effectiveProfit = labourCost !== null ? profit - labourCost : profit;
   return {
     fees,
     profit,
     marginPercent: sale > 0 ? Math.round((profit / sale) * 1000) / 10 : null,
+    effectiveMarginPercent: sale > 0 ? Math.round((effectiveProfit / sale) * 1000) / 10 : null,
     labourHours,
     labourCost,
     profitAfterLabour: labourCost !== null ? r2(profit - labourCost) : null,

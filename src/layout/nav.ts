@@ -9,6 +9,7 @@ export interface NavEntry {
 export const sideNav: NavEntry[] = [
   { path: '/', label: 'Dashboard' },
   { path: '/items', label: 'Items' },
+  { path: '/stall', label: 'Stall' },
   { path: '/jobs', label: 'Jobs' },
   { path: '/purchases', label: 'Purchases' },
   { path: '/parts', label: 'Parts' },

@@ -71,9 +71,14 @@ export function ItemsList() {
       <PageHeader
         title="Items"
         actions={
-          <Link to="/items/new" className="btn btn-primary desktop-only">
-            + Add item
-          </Link>
+          <>
+            <Link to="/stall" className="btn btn-secondary">
+              Stall
+            </Link>
+            <Link to="/items/new" className="btn btn-primary desktop-only">
+              + Add item
+            </Link>
+          </>
         }
       />
 
@@ -128,7 +133,12 @@ export function ItemsList() {
               </div>
               <div className="list-row-side">
                 <StatusBadge status={item.status} />
-                <span className="muted">{cost ? `${moneyWhole(cost.total_cost)} cost` : ''}</span>
+                {cost && cost.sale_value !== null && <span title="Value: what you hope to sell it for">{moneyWhole(cost.sale_value)}</span>}
+                {cost && (
+                  <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>
+                    cost {moneyWhole(cost.total_cost)}
+                  </span>
+                )}
               </div>
             </Link>
           );

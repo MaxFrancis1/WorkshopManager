@@ -255,7 +255,36 @@ export interface CalcState {
   sale: string;
   channelId: string;
   postage: string;
-  target: string;
+  margin: string;
+}
+
+interface CalcBasis {
+  cost: number;
+  labourMinutes: number;
+  labourRate: number | null;
+  channels: Channel[];
+}
+
+function inputsFor(state: CalcState, basis: CalcBasis) {
+  const channel: ChannelFees | null = basis.channels.find((c) => c.id === state.channelId) ?? null;
+  const postage = parseMoney(state.postage);
+  return { channel, postageOut: postage === null || Number.isNaN(postage) ? 0 : postage };
+}
+
+/** Sets the expected sale and works out the margin it gives. */
+export function withSale(state: CalcState, sale: string, basis: CalcBasis): CalcState {
+  const n = parseMoney(sale);
+  if (n === null || Number.isNaN(n) || n <= 0) return { ...state, sale, margin: n === null ? '' : state.margin };
+  const e = estimate({ cost: basis.cost, salePrice: n, labourMinutes: basis.labourMinutes, labourRate: basis.labourRate, targetMarginPercent: null, ...inputsFor(state, basis) });
+  return { ...state, sale, margin: e.effectiveMarginPercent !== null ? String(e.effectiveMarginPercent) : '' };
+}
+
+/** Sets the margin and works out the sale price that achieves it. */
+export function withMargin(state: CalcState, margin: string, basis: CalcBasis): CalcState {
+  const m = margin.trim() === '' ? null : Number(margin.replace('%', ''));
+  if (m === null || !Number.isFinite(m)) return { ...state, margin };
+  const e = estimate({ cost: basis.cost, salePrice: null, labourMinutes: basis.labourMinutes, labourRate: basis.labourRate, targetMarginPercent: m, ...inputsFor(state, basis) });
+  return { ...state, margin, sale: e.priceForTarget !== null ? moneyInput(e.priceForTarget) : state.sale };
 }
 
 export function ProfitCalculator({
@@ -266,22 +295,24 @@ export function ProfitCalculator({
   state,
   onChange,
   breakdown,
-}: {
-  cost: number;
-  labourMinutes: number;
-  labourRate: number | null;
-  channels: Channel[];
+}: CalcBasis & {
   state: CalcState;
   onChange: (s: CalcState) => void;
   breakdown: { label: string; amount: number }[];
 }) {
+  const basis = { cost, labourMinutes, labourRate, channels };
   const saleN = parseMoney(state.sale);
   const postageN = parseMoney(state.postage);
-  const targetN = state.target.trim() === '' ? null : Number(state.target.replace('%', ''));
-  const channel: ChannelFees | null = channels.find((c) => c.id === state.channelId) ?? null;
-  const ok = !Number.isNaN(saleN) && !Number.isNaN(postageN) && (targetN === null || Number.isFinite(targetN));
+  const marginN = state.margin.trim() === '' ? null : Number(state.margin.replace('%', ''));
+  const { channel } = inputsFor(state, basis);
+  // A margin no price can reach (fees plus margin at or over 100%).
+  const marginImpossible =
+    marginN !== null &&
+    Number.isFinite(marginN) &&
+    estimate({ cost, salePrice: null, channel, postageOut: inputsFor(state, basis).postageOut, labourMinutes, labourRate, targetMarginPercent: marginN }).priceForTarget === null;
+  const ok = !Number.isNaN(saleN) && !Number.isNaN(postageN);
   const e = ok
-    ? estimate({ cost, salePrice: saleN, channel, postageOut: postageN ?? 0, labourMinutes, labourRate, targetMarginPercent: targetN })
+    ? estimate({ cost, salePrice: saleN, channel, postageOut: postageN ?? 0, labourMinutes, labourRate, targetMarginPercent: null })
     : null;
 
   return (
@@ -289,11 +320,29 @@ export function ProfitCalculator({
       <div className={styles.calcInputs}>
         <label className="field">
           <span className="field-label">Expected sale</span>
-          <input className="input input-sm" inputMode="decimal" placeholder="£" value={state.sale} aria-invalid={Number.isNaN(saleN)} onChange={(ev) => onChange({ ...state, sale: ev.target.value })} />
+          <input
+            className="input input-sm"
+            inputMode="decimal"
+            placeholder="£"
+            value={state.sale}
+            aria-invalid={Number.isNaN(saleN)}
+            onChange={(ev) => onChange(withSale(state, ev.target.value, basis))}
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">Margin %{labourRate !== null ? ' after labour' : ''}</span>
+          <input
+            className="input input-sm"
+            inputMode="decimal"
+            placeholder="e.g. 30"
+            value={state.margin}
+            aria-invalid={marginImpossible}
+            onChange={(ev) => onChange(withMargin(state, ev.target.value, basis))}
+          />
         </label>
         <label className="field">
           <span className="field-label">Channel</span>
-          <select className="input input-sm" value={state.channelId} onChange={(ev) => onChange({ ...state, channelId: ev.target.value })}>
+          <select className="input input-sm" value={state.channelId} onChange={(ev) => onChange(withSale({ ...state, channelId: ev.target.value }, state.sale, basis))}>
             <option value="">No fees</option>
             {channels.map((c) => (
               <option key={c.id} value={c.id}>
@@ -304,13 +353,21 @@ export function ProfitCalculator({
         </label>
         <label className="field">
           <span className="field-label">Postage out</span>
-          <input className="input input-sm" inputMode="decimal" placeholder="£" value={state.postage} aria-invalid={Number.isNaN(postageN)} onChange={(ev) => onChange({ ...state, postage: ev.target.value })} />
-        </label>
-        <label className="field">
-          <span className="field-label">Target margin %</span>
-          <input className="input input-sm" inputMode="decimal" placeholder="e.g. 30" value={state.target} onChange={(ev) => onChange({ ...state, target: ev.target.value })} />
+          <input
+            className="input input-sm"
+            inputMode="decimal"
+            placeholder="£"
+            value={state.postage}
+            aria-invalid={Number.isNaN(postageN)}
+            onChange={(ev) => onChange(withSale({ ...state, postage: ev.target.value }, state.sale, basis))}
+          />
         </label>
       </div>
+      <p className={marginImpossible ? 'field-error' : 'field-hint'} style={{ margin: 0 }}>
+        {marginImpossible
+          ? "No price reaches that margin once this channel's fees are taken."
+          : "Type a sale price or a margin; the other follows. The expected sale is saved as the item's value."}
+      </p>
 
       <div>
         {breakdown
@@ -335,10 +392,6 @@ export function ProfitCalculator({
               <span>Profit</span>
               <span className={e.profit < 0 ? 'negative' : undefined}>{money(e.profit)}</span>
             </div>
-            <div className="kv">
-              <span>Margin</span>
-              <span>{e.marginPercent !== null ? `${e.marginPercent}%` : '—'}</span>
-            </div>
             {e.profitAfterLabour !== null && (
               <div className="kv">
                 <span>After labour</span>
@@ -348,18 +401,10 @@ export function ProfitCalculator({
           </>
         )}
         {e && (
-          <>
-            <div className="kv">
-              <span>Break-even price{labourRate !== null ? ' (incl. labour)' : ''}</span>
-              <span>{money(e.breakEven)}</span>
-            </div>
-            {targetN !== null && (
-              <div className="kv">
-                <span>Price for {targetN}% margin</span>
-                <span>{e.priceForTarget !== null ? money(e.priceForTarget) : 'Not possible'}</span>
-              </div>
-            )}
-          </>
+          <div className="kv">
+            <span>Break-even price{labourRate !== null ? ' (incl. labour)' : ''}</span>
+            <span>{money(e.breakEven)}</span>
+          </div>
         )}
       </div>
 
