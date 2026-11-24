@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { addToFindNote, createListing, deleteToFindNote, markSourced, reopenToFindNote, updateListingPrice, withdrawListing } from '../../lib/api';
 import { daysSince, money, moneyInput, parseMoney, todayIso } from '../../lib/format';
-import { estimate, labourLine, type ChannelFees } from '../../lib/profit';
+import { canReachMargin, estimate, labourLine, type ChannelFees } from '../../lib/profit';
 import type { Channel, Listing, ToFindNote } from '../../lib/types';
 import { errorMessage } from '../../lib/useAsync';
 import styles from './ItemDetail.module.css';
@@ -256,6 +256,8 @@ export interface CalcState {
   channelId: string;
   postage: string;
   margin: string;
+  /** Which of the linked pair was typed last; the other is worked out from it. */
+  lastEdited?: 'sale' | 'margin';
 }
 
 interface CalcBasis {
@@ -274,17 +276,20 @@ function inputsFor(state: CalcState, basis: CalcBasis) {
 /** Sets the expected sale and works out the margin it gives. */
 export function withSale(state: CalcState, sale: string, basis: CalcBasis): CalcState {
   const n = parseMoney(sale);
-  if (n === null || Number.isNaN(n) || n <= 0) return { ...state, sale, margin: n === null ? '' : state.margin };
+  if (n === null || Number.isNaN(n) || n <= 0) return { ...state, sale, lastEdited: 'sale', margin: n === null ? '' : state.margin };
   const e = estimate({ cost: basis.cost, salePrice: n, labourMinutes: basis.labourMinutes, labourRate: basis.labourRate, targetMarginPercent: null, ...inputsFor(state, basis) });
-  return { ...state, sale, margin: e.effectiveMarginPercent !== null ? String(e.effectiveMarginPercent) : '' };
+  return { ...state, sale, lastEdited: 'sale', margin: e.effectiveMarginPercent !== null ? String(e.effectiveMarginPercent) : '' };
 }
 
 /** Sets the margin and works out the sale price that achieves it. */
 export function withMargin(state: CalcState, margin: string, basis: CalcBasis): CalcState {
   const m = margin.trim() === '' ? null : Number(margin.replace('%', ''));
-  if (m === null || !Number.isFinite(m)) return { ...state, margin };
+  if (m === null || !Number.isFinite(m)) return { ...state, margin, lastEdited: 'margin' };
   const e = estimate({ cost: basis.cost, salePrice: null, labourMinutes: basis.labourMinutes, labourRate: basis.labourRate, targetMarginPercent: m, ...inputsFor(state, basis) });
-  return { ...state, margin, sale: e.priceForTarget !== null ? moneyInput(e.priceForTarget) : state.sale };
+  // With nothing to cover (a free item, no fixed fee) every price gives the same
+  // margin, so there is no single price to work out: keep the sale as it is.
+  const price = e.priceForTarget !== null && e.priceForTarget > 0 ? moneyInput(e.priceForTarget) : state.sale;
+  return { ...state, margin, lastEdited: 'margin', sale: price };
 }
 
 export function ProfitCalculator({
@@ -305,11 +310,16 @@ export function ProfitCalculator({
   const postageN = parseMoney(state.postage);
   const marginN = state.margin.trim() === '' ? null : Number(state.margin.replace('%', ''));
   const { channel } = inputsFor(state, basis);
-  // A margin no price can reach (fees plus margin at or over 100%).
+  // Only a margin you typed can be out of reach; one worked out from the price is
+  // always true (a free item really does make 100%).
   const marginImpossible =
+    state.lastEdited === 'margin' &&
     marginN !== null &&
     Number.isFinite(marginN) &&
-    estimate({ cost, salePrice: null, channel, postageOut: inputsFor(state, basis).postageOut, labourMinutes, labourRate, targetMarginPercent: marginN }).priceForTarget === null;
+    !canReachMargin({ cost, salePrice: null, channel, postageOut: inputsFor(state, basis).postageOut, labourMinutes, labourRate, targetMarginPercent: marginN });
+  const { postageOut } = inputsFor(state, basis);
+  const nothingToCover =
+    cost === 0 && postageOut === 0 && (channel?.fixed_fee ?? 0) === 0 && (labourRate === null || labourMinutes === 0);
   const ok = !Number.isNaN(saleN) && !Number.isNaN(postageN);
   const e = ok
     ? estimate({ cost, salePrice: saleN, channel, postageOut: postageN ?? 0, labourMinutes, labourRate, targetMarginPercent: null })
@@ -366,7 +376,9 @@ export function ProfitCalculator({
       <p className={marginImpossible ? 'field-error' : 'field-hint'} style={{ margin: 0 }}>
         {marginImpossible
           ? "No price reaches that margin once this channel's fees are taken."
-          : "Type a sale price or a margin; the other follows. The expected sale is saved as the item's value."}
+          : nothingToCover && state.lastEdited === 'margin'
+            ? 'Nothing to cover on this one, so every price gives the same margin. Set the expected sale instead.'
+            : "Type a sale price or a margin; the other follows. The expected sale is saved as the item's value."}
       </p>
 
       <div>

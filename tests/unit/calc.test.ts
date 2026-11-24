@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { splitCost } from '../../src/lib/costSplit.ts';
 import { listingText } from '../../src/lib/listingText.ts';
-import { channelFees, estimate, labourLine, maxPurchasePrice } from '../../src/lib/profit.ts';
+import { canReachMargin, channelFees, estimate, labourLine, maxPurchasePrice } from '../../src/lib/profit.ts';
 
 const ebay = { fee_percent: 12.8, fixed_fee: 0.3 };
 const gbp = (n: number) => `£${n.toFixed(0)}`;
@@ -58,6 +58,15 @@ describe('profit estimate', () => {
     const e = estimate({ cost: 10, salePrice: null, channel: { fee_percent: 50, fixed_fee: 0 }, postageOut: 0, labourMinutes: 0, labourRate: null, targetMarginPercent: 50 });
     assert.equal(e.priceForTarget, null);
     assert.equal(channelFees(0, ebay), 0);
+  });
+
+  test('a free item makes 100% margin at any price; fees limit everything else', () => {
+    const free = { cost: 0, salePrice: 80, channel: null, postageOut: 0, labourMinutes: 0, labourRate: null, targetMarginPercent: null };
+    assert.equal(estimate(free).effectiveMarginPercent, 100);
+    assert.equal(canReachMargin({ ...free, targetMarginPercent: 100 }), true, 'free item, no fees');
+    assert.equal(canReachMargin({ ...free, targetMarginPercent: 100, channel: ebay }), false, 'fees take a cut');
+    assert.equal(canReachMargin({ ...free, targetMarginPercent: 80, channel: ebay }), true);
+    assert.equal(canReachMargin({ ...free, cost: 10, targetMarginPercent: 100 }), false, 'a cost to cover');
   });
 
   test('what-if: most you can pay before buying', () => {
