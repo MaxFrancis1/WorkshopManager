@@ -100,6 +100,12 @@ runtime or dev.
   The dashboard shows both (Stock value, Invested). On the item page, expected sale and
   margin % are linked (typing one fills the other) and the expected sale is saved as
   `expected_price` only after the user types it.
+- **Two profits.** The dashboard headline "Profit" is money in − money out
+  (`money_flows`, `monthly_net`, `dashboard_summary.*_money_*`): sales after fees and
+  postage in; purchases, restocks, overheads, work extras and sourced parts out, each
+  on its own date. It goes negative when stock is bought and not yet sold. "Profit on
+  sales" (`sale_profits`) is sale − that item's cost, used on sale pages and as the
+  secondary dashboard figure.
 - Purchase sources are configured in Settings (`sources` table); purchases reference
   them by `source_id`.
 - Pages remount when the path changes (`FreshPerPath` in `App.tsx`), so moving from
