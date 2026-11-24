@@ -42,11 +42,13 @@ export function ItemForm() {
   const category = categories.find((c) => c.id === form.category_id);
   const allocated = parseMoney(form.allocated_cost);
   const allocatedInvalid = Number.isNaN(allocated);
+  const value = parseMoney(form.expected_price);
+  const valueInvalid = Number.isNaN(value);
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm({ ...form, [key]: value });
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!form || !form.name.trim() || allocatedInvalid) return;
+    if (!form || !form.name.trim() || allocatedInvalid || valueInvalid) return;
     setSaving(true);
     setSaveError(null);
     const input: ItemInput = {
@@ -58,6 +60,7 @@ export function ItemForm() {
       purchase_id: form.purchase_id || null,
       allocated_cost: form.purchase_id ? allocated : null,
       notes: form.notes.trim() || null,
+      expected_price: value,
     };
     try {
       if (item) {
@@ -151,6 +154,19 @@ export function ItemForm() {
             </label>
           )}
 
+          <label className="field">
+            <span className="field-label">Value (hope to sell for)</span>
+            <input
+              className="input"
+              inputMode="decimal"
+              placeholder="£"
+              aria-invalid={valueInvalid}
+              value={form.expected_price}
+              onChange={(e) => set('expected_price', e.target.value)}
+            />
+            <span className="field-hint">Shown next to cost, and counted in stock value until it's listed.</span>
+          </label>
+
           <label className="field span-2">
             <span className="field-label">Purchase</span>
             <select className="input" value={form.purchase_id} onChange={(e) => set('purchase_id', e.target.value)}>
@@ -193,7 +209,7 @@ export function ItemForm() {
         <ErrorNote error={saveError} />
 
         <div className="form-actions">
-          <button className="btn btn-primary" type="submit" disabled={saving || !form.name.trim() || allocatedInvalid}>
+          <button className="btn btn-primary" type="submit" disabled={saving || !form.name.trim() || allocatedInvalid || valueInvalid}>
             {saving ? 'Saving…' : item ? 'Save changes' : 'Add item'}
           </button>
           <Link to={item ? `/items/${item.id}` : '/items'} className="btn btn-secondary">
@@ -220,6 +236,7 @@ interface FormState {
   status: ItemStatus;
   purchase_id: string;
   allocated_cost: string;
+  expected_price: string;
   notes: string;
 }
 
@@ -232,6 +249,7 @@ const EMPTY: FormState = {
   status: 'in_stock',
   purchase_id: '',
   allocated_cost: '',
+  expected_price: '',
   notes: '',
 };
 
@@ -245,6 +263,7 @@ function fromItem(item: Item): FormState {
     status: item.status,
     purchase_id: item.purchase_id ?? '',
     allocated_cost: moneyInput(item.allocated_cost),
+    expected_price: moneyInput(item.expected_price),
     notes: item.notes ?? '',
   };
 }

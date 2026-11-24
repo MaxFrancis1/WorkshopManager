@@ -49,11 +49,21 @@ export interface Item {
   customer_id: string | null;
   notes: string | null;
   created_at: string;
+  /** What you are trying to sell it for. */
+  expected_price: number | null;
+}
+
+/** Where a purchase came from (Facebook, car boot, Present…), set up in Settings. */
+export interface Source {
+  id: string;
+  name: string;
 }
 
 export interface Purchase {
   id: string;
   purchased_on: string;
+  source_id: string | null;
+  /** The source's name, read through source_id. */
   source: string | null;
   price: number;
   postage_in: number;
@@ -80,6 +90,13 @@ export interface ItemCost {
   labour_cost: number | null;
   work_charge: number;
   open_to_find_count: number;
+  expected_price: number | null;
+  /** Lowest asking price of a live listing of this item on its own. */
+  listed_price: number | null;
+  /** listed_price, else expected_price. */
+  sale_value: number | null;
+  /** sale_value − total_cost, before fees. */
+  potential_profit: number | null;
 }
 
 /** View: public.purchase_allocations */
@@ -93,6 +110,7 @@ export interface PurchaseAllocation {
   allocated_cost: number;
   unallocated_cost: number;
   over_allocated: boolean;
+  source_id: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +325,11 @@ export interface DashboardSummary {
   ytd_overheads: number;
   avg_days_to_sell: number | null;
   recent_sales_timed: number;
+  /** Unsold stock at sale value (priced items only). stock_value is the invested cost. */
+  stock_sale_value: number;
+  /** Cost of the priced items, to compare with stock_sale_value. */
+  stock_priced_cost: number;
+  stock_unpriced_count: number;
 }
 
 /** View: public.monthly_profit */

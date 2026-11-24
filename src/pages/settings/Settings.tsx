@@ -74,6 +74,10 @@ export function Settings() {
           <span>Categories and custom fields</span>
           {icons.chevron}
         </Link>
+        <Link to="/settings/sources" className={styles.row}>
+          <span>Purchase sources</span>
+          {icons.chevron}
+        </Link>
         <Link to="/settings/channels" className={styles.row}>
           <span>Selling channels and fees</span>
           {icons.chevron}

@@ -92,10 +92,20 @@ function DashboardBody({ data }: { data: Awaited<ReturnType<typeof getDashboard>
             {s.ytd_sales} sales · {s.ytd_losses} at a loss
           </span>
         </div>
-        <Link to="/items" className="tile" style={{ textDecoration: 'none', color: 'inherit' }}>
+        <Link to="/stall" className="tile" style={{ textDecoration: 'none', color: 'inherit' }}>
           <span className="tile-label">Stock value</span>
+          <span className="tile-value">{moneyWhole(s.stock_sale_value)}</span>
+          <span className="tile-sub">
+            {moneyWhole(s.stock_sale_value - s.stock_priced_cost)} potential profit
+            {s.stock_unpriced_count > 0 ? ` · ${s.stock_unpriced_count} not priced` : ''}
+          </span>
+        </Link>
+        <Link to="/items" className="tile" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <span className="tile-label">Invested</span>
           <span className="tile-value">{moneyWhole(s.stock_value)}</span>
-          <span className="tile-sub">{s.stock_count} items at cost</span>
+          <span className="tile-sub">
+            {s.stock_count} item{s.stock_count === 1 ? '' : 's'} at cost
+          </span>
         </Link>
         <div className="tile">
           <span className="tile-label">Avg days to sell</span>

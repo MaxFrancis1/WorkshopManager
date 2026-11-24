@@ -40,6 +40,20 @@ describe('profit estimate', () => {
     assert.ok(Math.abs((atTarget.marginPercent ?? 0) - 25) <= 0.1, `margin was ${atTarget.marginPercent}`);
   });
 
+  test('margin and expected sale are two views of one number, with or without labour', () => {
+    for (const labourRate of [null, 30]) {
+      const base = { cost: 141, channel: ebay, postageOut: 15, labourMinutes: 65, labourRate };
+      // Typing a margin gives a price...
+      const price = estimate({ ...base, salePrice: null, targetMarginPercent: 25 }).priceForTarget!;
+      // ...and typing that price gives the margin back.
+      const back = estimate({ ...base, salePrice: price, targetMarginPercent: null }).effectiveMarginPercent!;
+      assert.ok(Math.abs(back - 25) <= 0.1, `rate ${labourRate}: price ${price} gave ${back}%`);
+    }
+    const e = estimate({ cost: 100, salePrice: 200, channel: null, postageOut: 0, labourMinutes: 60, labourRate: 20, targetMarginPercent: null });
+    assert.equal(e.marginPercent, 50);
+    assert.equal(e.effectiveMarginPercent, 40, 'after £20 of labour');
+  });
+
   test('no target price when fees plus margin reach 100%', () => {
     const e = estimate({ cost: 10, salePrice: null, channel: { fee_percent: 50, fixed_fee: 0 }, postageOut: 0, labourMinutes: 0, labourRate: null, targetMarginPercent: 50 });
     assert.equal(e.priceForTarget, null);

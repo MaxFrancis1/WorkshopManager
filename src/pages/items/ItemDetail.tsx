@@ -26,15 +26,20 @@ import { channelFees } from '../../lib/profit';
 import { ACTIVE_STATUSES, ITEM_STATUSES, STATUS_LABELS, type ItemStatus } from '../../lib/types';
 import { errorMessage, useAsync } from '../../lib/useAsync';
 import styles from './ItemDetail.module.css';
-import { ListingTextCard, PostedTo, ProfitCalculator, ToFindSection, type CalcState } from './sections';
+import { ListingTextCard, PostedTo, ProfitCalculator, ToFindSection, withSale, type CalcState } from './sections';
 
-const EMPTY_CALC: CalcState = { sale: '', channelId: '', postage: '', target: '' };
+const EMPTY_CALC: CalcState = { sale: '', channelId: '', postage: '', margin: '' };
 
-/** Calculator inputs are remembered per item in this browser only. */
-function loadCalc(itemId: string): CalcState | null {
+/**
+ * Channel and postage are remembered per item in this browser only. The expected
+ * sale is saved on the item (its value), and the margin is worked out from it.
+ */
+function loadCalc(itemId: string): Pick<CalcState, 'channelId' | 'postage'> | null {
   try {
     const raw = localStorage.getItem(`calc:${itemId}`);
-    return raw ? { ...EMPTY_CALC, ...(JSON.parse(raw) as Partial<CalcState>) } : null;
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Partial<CalcState>;
+    return { channelId: saved.channelId ?? '', postage: saved.postage ?? '' };
   } catch {
     return null;
   }
@@ -42,7 +47,7 @@ function loadCalc(itemId: string): CalcState | null {
 
 function saveCalc(itemId: string, state: CalcState) {
   try {
-    localStorage.setItem(`calc:${itemId}`, JSON.stringify(state));
+    localStorage.setItem(`calc:${itemId}`, JSON.stringify({ channelId: state.channelId, postage: state.postage }));
   } catch {
     /* storage unavailable: fine, it's a convenience */
   }
@@ -74,15 +79,43 @@ export function ItemDetail() {
   const [calc, setCalc] = useState<CalcState>(EMPTY_CALC);
   const [calcReady, setCalcReady] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [saleTyped, setSaleTyped] = useState(false);
 
-  // Calculator defaults: saved inputs, else the live listing's price and channel.
+  // Calculator defaults: the item's value (else its live listing's price), and the
+  // channel and postage last used for it in this browser.
   useEffect(() => {
-    if (!data || calcReady) return;
+    if (!data?.item || calcReady) return;
     const saved = loadCalc(id);
     const live = data.listings.find((l) => l.status === 'live');
-    setCalc(saved ?? { ...EMPTY_CALC, sale: moneyInput(live?.asking_price ?? null), channelId: live?.channel_id ?? data.channels[0]?.id ?? '' });
+    const start: CalcState = {
+      ...EMPTY_CALC,
+      channelId: saved?.channelId ?? live?.channel_id ?? data.channels[0]?.id ?? '',
+      postage: saved?.postage ?? '',
+    };
+    const sale = moneyInput(data.item.expected_price ?? live?.asking_price ?? null);
+    setCalc(
+      withSale(start, sale, {
+        cost: data.cost?.total_cost ?? 0,
+        labourMinutes: data.cost?.labour_minutes ?? 0,
+        labourRate: data.settings.labour_rate,
+        channels: data.channels,
+      }),
+    );
     setCalcReady(true);
   }, [data, calcReady, id]);
+
+  // Save the expected sale as the item's value, shortly after you type it (never
+  // just from opening the page, which pre-fills it from a listing's price).
+  const savedPrice = data?.item?.expected_price ?? null;
+  useEffect(() => {
+    if (!calcReady || !saleTyped) return;
+    const n = parseMoney(calc.sale);
+    if (Number.isNaN(n) || n === savedPrice) return;
+    const t = window.setTimeout(() => {
+      updateItem(id, { expected_price: n }).then(reload, (err: unknown) => setActionError(errorMessage(err)));
+    }, 800);
+    return () => window.clearTimeout(t);
+  }, [calc.sale, calcReady, saleTyped, savedPrice, id, reload]);
 
   if (loading && !data) return <Loading />;
   if (error) return <ErrorNote error={error} />;
@@ -135,6 +168,9 @@ export function ItemDetail() {
   const saleN = parseMoney(calc.sale);
   const calcChannel = channels.find((c) => c.id === calc.channelId) ?? null;
   const postageN = parseMoney(calc.postage);
+  // Value: what's being typed in the calculator, else the item's saved value.
+  const listedPrice = cost?.listed_price ?? null;
+  const valueN = saleN !== null && !Number.isNaN(saleN) ? saleN : (cost?.sale_value ?? null);
   const quickProfit =
     saleN !== null && !Number.isNaN(saleN) && !Number.isNaN(postageN)
       ? saleN - channelFees(saleN, calcChannel) - (postageN ?? 0) - totalCost
@@ -194,18 +230,21 @@ export function ItemDetail() {
           </Link>
         </section>
       ) : (
-        <section className="tiles tiles-3 mobile-only">
+        <section className="tiles tiles-3">
           <div className="tile">
             <span className="tile-label">Cost</span>
             <span className="tile-value">{money(totalCost)}</span>
+            <span className="tile-sub">What you've put in</span>
           </div>
           <div className="tile">
-            <span className="tile-label">Expected sale</span>
-            <span className="tile-value">{saleN && !Number.isNaN(saleN) ? money(saleN) : '—'}</span>
+            <span className="tile-label">Value</span>
+            <span className="tile-value">{valueN !== null ? money(valueN) : '—'}</span>
+            <span className="tile-sub">{listedPrice !== null ? 'Asking price' : valueN !== null ? 'Hope to sell for' : 'Set below'}</span>
           </div>
           <div className={`tile ${quickProfit !== null && quickProfit >= 0 ? 'tile-accent' : ''}`}>
             <span className="tile-label">Profit</span>
             <span className={`tile-value${quickProfit !== null && quickProfit < 0 ? ' negative' : ''}`}>{quickProfit !== null ? money(quickProfit) : '—'}</span>
+            <span className="tile-sub">After fees, est.</span>
           </div>
         </section>
       )}
@@ -285,6 +324,7 @@ export function ItemDetail() {
                 channels={channels}
                 state={calc}
                 onChange={(s) => {
+                  if (s.sale !== calc.sale) setSaleTyped(true);
                   setCalc(s);
                   saveCalc(item.id, s);
                 }}

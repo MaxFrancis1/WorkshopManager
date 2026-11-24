@@ -226,7 +226,7 @@ describe('buy, refurb, sell (Srixon P–5 irons)', () => {
       );
 
       ids.purchase = await q(
-        `insert into purchases (purchased_on, source, price, postage_in) values ('2026-10-01', 'eBay', 100.00, 10.00) returning id`,
+        `insert into purchases (purchased_on, price, postage_in) values ('2026-10-01', 100.00, 10.00) returning id`,
       );
       ids.irons = await q(
         `insert into items (name, contents, purchase_id, allocated_cost) values ('Srixon P–5 irons', '5–PW', $1, 80.00) returning id`,
@@ -419,17 +419,18 @@ describe('log_purchase', () => {
 
   test('saves the purchase and its items together, owned by the caller, with short IDs', async () => {
     const cat = await one(D, `insert into categories (name) values ('Putter') returning id`);
+    const ebay = await one(D, `insert into sources (name) values ('eBay') returning id`);
     const { purchase_id } = await one(D, 'select log_purchase($1::jsonb, $2::jsonb) as purchase_id', [
-      JSON.stringify({ purchased_on: '2026-11-11', source: ' eBay ', price: 120, postage_in: 8.5, notes: '' }),
+      JSON.stringify({ purchased_on: '2026-11-11', source_id: ebay.id, price: 120, postage_in: 8.5, notes: '' }),
       JSON.stringify([
         { name: ' Srixon P–5 irons ', category_id: null, contents: '5–PW', condition: 'Good', field_values: {}, allocated_cost: 100 },
         { name: 'Odyssey White Hot #1', category_id: cat.id, contents: '', condition: null, field_values: { a: '34"' }, allocated_cost: null },
       ]),
     ]);
 
-    const purchase = await one(D, 'select owner_id, source, price, postage_in, notes from purchases where id = $1', [purchase_id]);
+    const purchase = await one(D, 'select owner_id, source_id, price, postage_in, notes from purchases where id = $1', [purchase_id]);
     assert.equal(purchase.owner_id, D);
-    assert.equal(purchase.source, 'eBay');
+    assert.equal(purchase.source_id, ebay.id);
     assert.equal(purchase.notes, null);
 
     const items = await all(D, 'select name, short_id, owner_id, contents, field_values from items where purchase_id = $1 order by name', [purchase_id]);
@@ -695,7 +696,7 @@ describe('purchase sources', () => {
     assert.deepEqual(sources.map((s) => s.name), ['Facebook', 'Present']);
     const linked = await all(
       G,
-      'select p.price, s.name as source_name, p.source from purchases p left join sources s on s.id = p.source_id order by p.price, p.created_at',
+      'select p.price, s.name as source_name from purchases p left join sources s on s.id = p.source_id order by p.price, p.created_at',
     );
     assert.deepEqual(
       linked.map((r) => [n(r.price), r.source_name]),
@@ -711,27 +712,14 @@ describe('purchase sources', () => {
     assert.equal(alloc[0]!.source, 'Facebook');
   });
 
-  test('the transitional trigger keeps source text and source_id in step both ways', async () => {
-    // Text from the old screens finds the existing source, whatever the case.
-    const p = await one(G, `insert into purchases (source, price) values ('PRESENT', 1) returning id, source, source_id`);
+  test('after the cleanup migration, purchases use source_id only', async () => {
+    const col = await db.query(`select 1 from information_schema.columns where table_schema = 'public' and table_name = 'purchases' and column_name = 'source'`);
+    assert.equal(col.rows.length, 0, 'free-text source column dropped');
+    const trg = await db.query(`select 1 from pg_trigger where tgname = 'purchases_sync_source'`);
+    assert.equal(trg.rows.length, 0, 'transitional trigger dropped');
     const present = await one(G, `select id from sources where name = 'Present'`);
-    assert.equal(p.source_id, present.id);
-    assert.equal(p.source, 'Present');
-
-    // New text creates a new source.
-    const q = await one(G, `insert into purchases (source, price) values ('Car boot', 2) returning id, source_id`);
-    assert.ok(q.source_id);
-    assert.equal(n((await one(G, 'select count(*) as c from sources')).c), 3);
-
-    // Choosing a source by id sets the text; editing the text moves the id.
-    const fb = await one(G, `select id from sources where name = 'Facebook'`);
-    const r = await one(G, 'update purchases set source_id = $2 where id = $1 returning source', [q.id, fb.id]);
-    assert.equal(r.source, 'Facebook');
-    const t = await one(G, `update purchases set source = 'Present' where id = $1 returning source_id`, [q.id]);
-    assert.equal(t.source_id, present.id);
-    const blank = await one(G, `update purchases set source = '' where id = $1 returning source, source_id`, [q.id]);
-    assert.equal(blank.source, null);
-    assert.equal(blank.source_id, null);
+    const p = await one(G, 'insert into purchases (source_id, price) values ($1, 1) returning id', [present.id]);
+    assert.equal((await one(G, 'select source from purchase_allocations where purchase_id = $1', [p.id])).source, 'Present');
   });
 
   test('a source in use cannot be deleted; names are unique per owner, any case', async () => {
@@ -748,9 +736,8 @@ describe('purchase sources', () => {
       JSON.stringify({ source_id: fb.id, price: 50 }),
       JSON.stringify([{ name: 'Valued wedge', expected_price: 90 }]),
     ]);
-    const p = await one(G, 'select source, source_id from purchases where id = $1', [purchase_id]);
+    const p = await one(G, 'select source_id from purchases where id = $1', [purchase_id]);
     assert.equal(p.source_id, fb.id);
-    assert.equal(p.source, 'Facebook');
     const i = await one(G, 'select expected_price from items where purchase_id = $1', [purchase_id]);
     assert.equal(n(i.expected_price), 90);
   });

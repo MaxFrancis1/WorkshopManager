@@ -49,8 +49,11 @@ runtime or dev.
 - No anonymous access: revoke from `anon` on every new table, view and function.
   Grant tables to `authenticated`; views get `select` only.
 - **Cost roll-ups live in SQL views**, not client code: `item_costs`,
-  `purchase_allocations`, `sale_profits`, `job_totals`, `part_stock` (dashboard views
-  come in phase 6). Views use `with (security_invoker = true)` so RLS applies.
+  `purchase_allocations`, `sale_profits`, `job_totals`, `part_stock`, and the dashboard
+  views. Views use `with (security_invoker = true)` so RLS applies. Views with
+  dependents can only gain columns at the end (`create or replace view`).
+- When a column used by the live app is replaced, keep it working in the database PR
+  (e.g. a transitional sync trigger) and drop it in the PR that ships the new screens.
 - Functions: `set search_path = ''`, fully qualified names, security invoker. Stock
   movement, part-cost snapshots, work-line defaults and short IDs are triggers; the
   client just inserts rows.
@@ -91,6 +94,17 @@ runtime or dev.
   own chunks (`vite.config.ts`).
 - Calculator figures are estimates (`src/lib/profit.ts`); the dashboard and sale pages
   use actuals from `sale_profits` and the dashboard views.
+- **Cost vs value.** Cost (`item_costs.total_cost`, "invested") is what's been spent;
+  profit is always sale − cost. Value (`item_costs.sale_value`) is what the item should
+  sell for: the asking price of a live single-item listing, else `items.expected_price`.
+  The dashboard shows both (Stock value, Invested). On the item page, expected sale and
+  margin % are linked (typing one fills the other) and the expected sale is saved as
+  `expected_price` only after the user types it.
+- Purchase sources are configured in Settings (`sources` table); purchases reference
+  them by `source_id`.
+- Pages remount when the path changes (`FreshPerPath` in `App.tsx`), so moving from
+  one item to another never carries state across.
+- The Stall (`/stall`) shows live listings as cards, one per item or lot.
 - Money: `format.ts` has `money()` for display and `parseMoney()` for inputs (blank →
   null, invalid → NaN). `costSplit.ts` previews purchase splits; saved figures always
   come from the SQL views.

@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { cleanFieldValues, FieldValuesEditor } from '../../components/FieldValuesEditor';
+import { SourceSelect } from '../../components/SourceSelect';
 import { ErrorNote, Loading } from '../../components/ui';
 import { PageHeader } from '../../layout/PageHeader';
 import { listCategories, listSources, logPurchase } from '../../lib/api';
 import { splitCost } from '../../lib/costSplit';
 import { money, parseMoney, todayIso } from '../../lib/format';
-import type { FieldValues } from '../../lib/types';
+import type { FieldValues, Source } from '../../lib/types';
 import { errorMessage, useAsync } from '../../lib/useAsync';
 import { CONDITIONS } from '../items/ItemForm';
 import styles from './PurchaseNew.module.css';
@@ -19,17 +20,19 @@ interface Row {
   condition: string;
   field_values: FieldValues;
   allocated: string;
+  value: string;
 }
 
 let nextKey = 1;
-const newRow = (): Row => ({ key: nextKey++, name: '', category_id: '', contents: '', condition: '', field_values: {}, allocated: '' });
+const newRow = (): Row => ({ key: nextKey++, name: '', category_id: '', contents: '', condition: '', field_values: {}, allocated: '', value: '' });
 
 export function PurchaseNew() {
   const navigate = useNavigate();
   const { data, error } = useAsync(() => Promise.all([listCategories(), listSources()]), []);
 
   const [purchasedOn, setPurchasedOn] = useState(todayIso());
-  const [source, setSource] = useState('');
+  const [sourceId, setSourceId] = useState('');
+  const [added, setAdded] = useState<Source[]>([]);
   const [price, setPrice] = useState('');
   const [postage, setPostage] = useState('');
   const [notes, setNotes] = useState('');
@@ -40,13 +43,15 @@ export function PurchaseNew() {
 
   if (error) return <ErrorNote error={error} />;
   if (!data) return <Loading />;
-  const [categories, sources] = data;
+  const [categories, loaded] = data;
+  const sources = [...loaded, ...added].sort((a, b) => a.name.localeCompare(b.name));
 
   const priceN = parseMoney(price);
   const postageN = parseMoney(postage);
   const allocations = rows.map((r) => parseMoney(r.allocated));
+  const values = rows.map((r) => parseMoney(r.value));
   const total = (priceN ?? 0) + (postageN ?? 0);
-  const validNumbers = [priceN, postageN, ...allocations].every((n) => !Number.isNaN(n));
+  const validNumbers = [priceN, postageN, ...allocations, ...values].every((n) => !Number.isNaN(n));
   const split = validNumbers ? splitCost(total, allocations) : null;
   const namesOk = rows.every((r) => r.name.trim());
   const canSave = validNumbers && namesOk && priceN !== null && !split?.overAllocated;
@@ -61,7 +66,7 @@ export function PurchaseNew() {
     setSaveError(null);
     try {
       const id = await logPurchase(
-        { purchased_on: purchasedOn, source: source.trim() || null, price: priceN ?? 0, postage_in: postageN ?? 0, notes: notes.trim() || null },
+        { purchased_on: purchasedOn, source_id: sourceId || null, price: priceN ?? 0, postage_in: postageN ?? 0, notes: notes.trim() || null },
         rows.map((r, i) => {
           const category = categories.find((c) => c.id === r.category_id);
           return {
@@ -71,6 +76,7 @@ export function PurchaseNew() {
             condition: r.condition.trim() || null,
             field_values: category ? cleanFieldValues(category.category_fields, r.field_values) : {},
             allocated_cost: allocations[i] ?? null,
+            expected_price: values[i] ?? null,
           };
         }),
       );
@@ -95,15 +101,10 @@ export function PurchaseNew() {
               <span className="field-label">Date</span>
               <input className="input" type="date" value={purchasedOn} onChange={(e) => setPurchasedOn(e.target.value)} />
             </label>
-            <label className="field">
+            <div className="field">
               <span className="field-label">Source</span>
-              <input className="input" list="sources" value={source} placeholder="e.g. eBay, car boot" onChange={(e) => setSource(e.target.value)} />
-              <datalist id="sources">
-                {sources.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            </label>
+              <SourceSelect sources={sources} value={sourceId} onChange={setSourceId} onCreated={(src) => setAdded((a) => [...a, src])} />
+            </div>
             <label className="field">
               <span className="field-label">Price paid</span>
               <input
@@ -206,6 +207,17 @@ export function PurchaseNew() {
                       value={r.allocated}
                       aria-invalid={Number.isNaN(alloc)}
                       onChange={(e) => updateRow(r.key, { allocated: e.target.value })}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">Value (hope to sell for)</span>
+                    <input
+                      className="input input-sm"
+                      inputMode="decimal"
+                      placeholder="£"
+                      value={r.value}
+                      aria-invalid={Number.isNaN(values[i])}
+                      onChange={(e) => updateRow(r.key, { value: e.target.value })}
                     />
                   </label>
                 </div>
