@@ -330,18 +330,27 @@ export interface DashboardSummary {
   /** Cost of the priced items, to compare with stock_sale_value. */
   stock_priced_cost: number;
   stock_unpriced_count: number;
+  /** Money in (sales after fees and postage) and out (purchases, parts, overheads, work). */
+  month_money_in: number;
+  month_money_out: number;
+  ytd_money_in: number;
+  ytd_money_out: number;
+  total_money_in: number;
+  total_money_out: number;
 }
 
-/** View: public.monthly_profit */
-export interface MonthlyProfit {
+/** View: public.monthly_net */
+export interface MonthlyNet {
   month: string;
-  sales_count: number;
-  revenue: number;
-  profit: number;
-  loss_count: number;
-  overheads: number;
-  profit_after_overheads: number;
+  money_in: number;
+  money_out: number;
+  net: number;
+  purchases_out: number;
+  parts_out: number;
+  overheads_out: number;
+  work_out: number;
 }
+
 
 /** View: public.channel_stats */
 export interface ChannelStats {

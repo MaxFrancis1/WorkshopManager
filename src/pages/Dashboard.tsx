@@ -60,9 +60,13 @@ export function Dashboard() {
 function DashboardBody({ data }: { data: Awaited<ReturnType<typeof getDashboard>> }) {
   const { summary: s, months, channels, categories, aged, toFind, lowStock, agedDays } = data;
   const now = new Date();
-  const monthAfter = s.month_profit - s.month_overheads;
+  // Headline profit is money in − money out, so buying stock with nothing sold yet
+  // shows as negative. Profit on sales (sale − that item's cost) is shown alongside.
+  const monthNet = s.month_money_in - s.month_money_out;
+  const ytdNet = s.ytd_money_in - s.ytd_money_out;
+  const totalNet = s.total_money_in - s.total_money_out;
   const recentMonths = months.slice(-6);
-  const maxBar = Math.max(1, ...recentMonths.map((m) => Math.abs(m.profit_after_overheads)));
+  const maxBar = Math.max(1, ...recentMonths.map((m) => Math.abs(m.net)));
   const agedTotal = aged.reduce((t, a) => t + a.total_cost, 0);
   const activeChannels = channels.filter((c) => c.posted > 0 || c.sold > 0 || c.live_listings > 0);
   const empty = s.stock_count === 0 && s.ytd_sales === 0;
@@ -72,24 +76,30 @@ function DashboardBody({ data }: { data: Awaited<ReturnType<typeof getDashboard>
       {empty && (
         <section className="card empty">
           <p>
-            Nothing to show yet. <Link to="/purchases/new">Log a purchase</Link> to add stock; profit figures appear once you record sales.
+            Nothing to show yet. <Link to="/purchases/new">Log a purchase</Link> to add stock.
           </p>
         </section>
       )}
 
       <section className={styles.tiles}>
-        <div className={`tile tile-accent ${styles.wide}`}>
+        <div className={`tile ${monthNet < 0 ? 'tile-negative' : 'tile-accent'} ${styles.wide}`}>
           <span className="tile-label">Profit · {monthLong.format(now)}</span>
-          <span className="tile-value">{moneyWhole(s.month_profit)}</span>
+          <span className="tile-value">{moneyWhole(monthNet)}</span>
           <span className="tile-sub">
-            {moneyWhole(monthAfter)} after overheads · {s.month_sales} sale{s.month_sales === 1 ? '' : 's'}
+            {moneyWhole(s.month_money_in)} in · {moneyWhole(s.month_money_out)} out
+          </span>
+          <span className="tile-sub">
+            {moneyWhole(s.month_profit)} profit on {s.month_sales} sale{s.month_sales === 1 ? '' : 's'}
           </span>
         </div>
         <div className="tile desktop-only">
           <span className="tile-label">Year to date</span>
-          <span className={`tile-value${s.ytd_profit < 0 ? ' negative' : ''}`}>{moneyWhole(s.ytd_profit)}</span>
+          <span className={`tile-value${ytdNet < 0 ? ' negative' : ''}`}>{moneyWhole(ytdNet)}</span>
           <span className="tile-sub">
-            {s.ytd_sales} sales · {s.ytd_losses} at a loss
+            {moneyWhole(s.ytd_money_in)} in · {moneyWhole(s.ytd_money_out)} out
+          </span>
+          <span className="tile-sub">
+            {moneyWhole(s.ytd_profit)} on {s.ytd_sales} sale{s.ytd_sales === 1 ? '' : 's'} · {s.ytd_losses} at a loss
           </span>
         </div>
         <Link to="/stall" className="tile" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -212,16 +222,16 @@ function DashboardBody({ data }: { data: Awaited<ReturnType<typeof getDashboard>
           <div className="section-head">
             <h2 className="section-title">Profit by month</h2>
             <span className="muted" style={{ fontSize: 12 }}>
-              After overheads
+              Money in − out
             </span>
           </div>
           <div
             className={styles.chart}
             role="img"
-            aria-label={`Monthly profit after overheads: ${recentMonths.map((m) => `${monthShort.format(parseMonth(m.month))} ${moneyWhole(m.profit_after_overheads)}`).join(', ')}`}
+            aria-label={`Money in minus out by month: ${recentMonths.map((m) => `${monthShort.format(parseMonth(m.month))} ${moneyWhole(m.net)}`).join(', ')}`}
           >
             {recentMonths.map((m, i) => {
-              const v = m.profit_after_overheads;
+              const v = m.net;
               const h = Math.round((Math.abs(v) / maxBar) * 110);
               const current = i === recentMonths.length - 1;
               return (
@@ -244,7 +254,8 @@ function DashboardBody({ data }: { data: Awaited<ReturnType<typeof getDashboard>
             })}
           </div>
           <p className="field-hint" style={{ margin: '8px 0 0' }}>
-            Losses show in red. Year to date: {moneyWhole(s.ytd_profit - s.ytd_overheads)} after {moneyWhole(s.ytd_overheads)} overheads.
+            Red months spent more than came in. Since you started: {moneyWhole(totalNet)} ({moneyWhole(s.total_money_in)} in,{' '}
+            {moneyWhole(s.total_money_out)} out).
           </p>
         </section>
       </div>
