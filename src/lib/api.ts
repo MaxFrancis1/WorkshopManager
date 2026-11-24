@@ -21,7 +21,7 @@ import type {
   JobStatus,
   JobTotals,
   Listing,
-  MonthlyProfit,
+  MonthlyNet,
   OpenToFind,
   Overhead,
   PartRestock,
@@ -620,7 +620,7 @@ export async function saveSettings(settings: Settings): Promise<void> {
 
 export interface DashboardData {
   summary: DashboardSummary;
-  months: MonthlyProfit[];
+  months: MonthlyNet[];
   channels: ChannelStats[];
   categories: CategorySellTime[];
   aged: AgedStock[];
@@ -632,7 +632,7 @@ export interface DashboardData {
 export async function getDashboard(): Promise<DashboardData> {
   const [summary, months, channels, categories, aged, toFind, lowStock, settings] = await Promise.all([
     db().from('dashboard_summary').select('*').single(),
-    db().from('monthly_profit').select('*').order('month'),
+    db().from('monthly_net').select('*').order('month'),
     db().from('channel_stats').select('*').order('posted', { ascending: false }),
     db().from('category_sell_times').select('*').order('sales_count', { ascending: false }),
     db().from('aged_stock').select('*').order('days_in_stock', { ascending: false }),
@@ -642,7 +642,7 @@ export async function getDashboard(): Promise<DashboardData> {
   ]);
   return {
     summary: must(summary) as DashboardSummary,
-    months: must(months) as MonthlyProfit[],
+    months: must(months) as MonthlyNet[],
     channels: must(channels) as ChannelStats[],
     categories: must(categories) as CategorySellTime[],
     aged: must(aged) as AgedStock[],
