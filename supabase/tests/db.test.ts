@@ -796,3 +796,75 @@ describe('item value', () => {
     await assert.rejects(all(V, 'update items set expected_price = -1 where id = $1', [ids.gift]), /check constraint/);
   });
 });
+
+describe('money in and out', () => {
+  const M = '00000000-0000-0000-0000-000000000008';
+
+  before(async () => {
+    await db.query(`insert into auth.users (id, email) values ($1, 'm@test')`, [M]);
+  });
+
+  test('buying stock with no sales shows as money out', async () => {
+    await one(M, 'insert into purchases (price, postage_in) values (100, 10) returning id');
+    const s = await one(M, 'select month_money_in, month_money_out, total_money_in, total_money_out, month_profit from dashboard_summary');
+    assert.equal(n(s.month_money_in), 0);
+    assert.equal(n(s.month_money_out), 110);
+    assert.equal(n(s.total_money_out), 110);
+    assert.equal(n(s.month_profit), 0, 'profit on sales is still 0: nothing sold');
+  });
+
+  test('every kind of spending and sales income is counted, by date', async () => {
+    await as(M, async (tx) => {
+      const id = async (sql: string, p: unknown[] = []) => (await tx.query<Row>(sql, p)).rows[0]!.id as string;
+      const purchase = (await tx.query<Row>('select id from purchases limit 1')).rows[0]!.id as string;
+      const item = await id(`insert into items (name, purchase_id) values ('Irons', $1) returning id`, [purchase]);
+      const grip = await id(`insert into part_types (name) values ('Grip') returning id`);
+      // Initial stock on a new part has no purchase date, so it is not counted…
+      const part = await id(`insert into parts (part_type_id, name, unit_cost, qty_on_hand) values ($1, 'MCC', 2, 50) returning id`, [grip]);
+      // …but a logged restock is.
+      await tx.query('insert into part_restocks (part_id, qty, unit_cost) values ($1, 5, 2.00)', [part]);
+      await tx.query(`insert into overheads (description, amount) values ('Solvent', 15)`);
+      const service = await id(`insert into services (name) values ('Clean') returning id`);
+      await tx.query('select add_work_line($1::jsonb)', [JSON.stringify({ item_id: item, service_id: service, extra_cost: 2.5 })]);
+      await tx.query(`insert into to_find_notes (item_id, description, status, cost, sourced_on) values ($1, '7-iron', 'sourced', 7, current_date)`, [item]);
+      await tx.query('select record_sale($1::jsonb, $2::uuid[])', [JSON.stringify({ sale_price: 150, fees: 20, postage_out: 5 }), [item]]);
+      // An old purchase: outside this year and the 12-month chart, but in the all-time total.
+      await tx.query('insert into purchases (purchased_on, price) values (current_date - 400, 30)');
+    });
+
+    const kinds = await all(M, 'select kind, sum(money_in) as money_in, sum(money_out) as money_out from money_flows group by kind order by kind');
+    assert.deepEqual(
+      kinds.map((k) => [k.kind, n(k.money_in), n(k.money_out)]),
+      [
+        ['extras', 0, 2.5],
+        ['overhead', 0, 15],
+        ['parts', 0, 10],
+        ['purchase', 0, 140],
+        ['sale', 125, 0],
+        ['sourced', 0, 7],
+      ],
+    );
+
+    const month = (await all(M, 'select * from monthly_net order by month')).at(-1)!;
+    assert.equal(n(month.money_in), 125);
+    assert.equal(n(month.money_out), 144.5); // 110 + 10 + 15 + 2.50 + 7
+    assert.equal(n(month.net), -19.5);
+    assert.equal(n(month.purchases_out), 110);
+    assert.equal(n(month.parts_out), 10);
+    assert.equal(n(month.overheads_out), 15);
+    assert.equal(n(month.work_out), 9.5);
+    assert.equal((await all(M, 'select 1 from monthly_net')).length, 12);
+
+    const s = await one(M, 'select * from dashboard_summary');
+    assert.equal(n(s.month_money_in), 125);
+    assert.equal(n(s.month_money_out), 144.5);
+    assert.equal(n(s.ytd_money_out), 144.5, 'the 400-day-old purchase is last year');
+    assert.equal(n(s.total_money_out), 174.5);
+    assert.equal(n(s.total_money_in), 125);
+  });
+
+  test('other users’ money does not leak in', async () => {
+    const s = await one(B, 'select total_money_out from dashboard_summary');
+    assert.notEqual(n(s.total_money_out), 174.5);
+  });
+});

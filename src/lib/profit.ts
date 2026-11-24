@@ -55,6 +55,19 @@ function priceFor(fixedCosts: number, channel: ChannelFees | null, margin: numbe
   return r2((fixedCosts + (channel?.fixed_fee ?? 0)) / denom);
 }
 
+/**
+ * Whether some sale price reaches the target margin. With nothing to cover (a free
+ * item, no fixed fee), 100% is reached at any price; otherwise fees plus margin must
+ * stay under 100%.
+ */
+export function canReachMargin(input: EstimateInput): boolean {
+  if (input.targetMarginPercent === null) return true;
+  const labourCost = input.labourRate !== null ? (input.labourMinutes / 60) * input.labourRate : 0;
+  const toCover = input.cost + input.postageOut + labourCost + (input.channel?.fixed_fee ?? 0);
+  const room = 1 - (input.channel?.fee_percent ?? 0) / 100 - input.targetMarginPercent / 100;
+  return room > 1e-9 || (Math.abs(room) <= 1e-9 && toCover === 0);
+}
+
 export function estimate(input: EstimateInput): Estimate {
   const labourHours = Math.round((input.labourMinutes / 60) * 100) / 100;
   const labourCost = input.labourRate !== null ? r2((input.labourMinutes / 60) * input.labourRate) : null;
